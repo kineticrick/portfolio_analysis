@@ -67,7 +67,7 @@ for _, row in splits_df.iterrows():
     multiplier = int(row['Multiplier'])
     
     merged_df.loc[merged_df['Symbol'] == symbol, 'CurrentShares'] = \
-        merged_df.loc[merged_df['Symbol'] == symbol, 'CurrentShares'] * 4
+        merged_df.loc[merged_df['Symbol'] == symbol, 'CurrentShares'] * multiplier
     
 with MysqlDB(dbcfg) as db:
     print(drop_summary_table_sql)
