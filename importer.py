@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import csv
 import os
@@ -11,7 +11,7 @@ from dbcfg import *
 from sql import *
 from pandas_helpers import * 
 
-dir_root = "/home/boone/code/python/portfolio_analysis"
+dir_root = "/home/kineticrick/code/python/portfolio_analysis"
 
 filedirs = {'entities': os.path.join(dir_root, 'files/entities'), 
             'splits': os.path.join(dir_root, 'files/splits'),
