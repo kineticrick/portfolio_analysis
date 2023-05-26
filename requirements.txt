@@ -79,4 +79,4 @@ usb-creator==0.3.7
 virtualenv==20.0.31
 wadllib==1.3.4
 xkit==0.0.0
-yfinance==0.1.55
+yfinance

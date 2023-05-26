@@ -15,6 +15,7 @@ dir_root = "/home/kineticrick/code/python/portfolio_analysis"
 
 filedirs = {'entities': os.path.join(dir_root, 'files/entities'), 
             'splits': os.path.join(dir_root, 'files/splits'),
+            'acquisitions': os.path.join(dir_root, 'files/acquisitions'),
             'schwab_transactions': os.path.join(dir_root, 'files/transactions/schwab'),
             'tdameritrade_transactions': os.path.join(dir_root, 'files/transactions/tdameritrade'),
             'wallmine_transactions': os.path.join(dir_root, 'files/transactions/wallmine')
@@ -106,13 +107,30 @@ def get_splits_from_csv(csvfiles):
             for row in reader: 
                 split_dict = {}
                 row = {k.lower(): v for k, v in row.items()}
-                split_dict['date'] = datetime.strptime(row.get('date'), "%m/%d/%Y").strftime("%Y-%m-%d")
+                split_dict['record_date'] = datetime.strptime(row.get('record_date'), "%m/%d/%Y").strftime("%Y-%m-%d")
+                split_dict['distribution_date'] = datetime.strptime(row.get('distribution_date'), "%m/%d/%Y").strftime("%Y-%m-%d")
                 split_dict['symbol'] = row['symbol']
                 split_dict['multiplier'] = row['multiplier']
                 
                 all_splits.append(split_dict)
     return all_splits
                         
+def get_acquisitions_from_csv(csvfiles):
+    all_acquisitions = []
+    
+    for csvfile in csvfiles:
+        with open(csvfile) as file: 
+            reader = csv.DictReader(file)
+            for row in reader: 
+                acquisition_dict = {}
+                row = {k.lower(): v for k, v in row.items()}
+                acquisition_dict['date'] = datetime.strptime(row.get('date'), "%m/%d/%Y").strftime("%Y-%m-%d")
+                acquisition_dict['target'] = row['target']
+                acquisition_dict['acquirer'] = row['acquirer']
+                acquisition_dict['conversion_ratio'] = row['conversion_ratio']
+                
+                all_acquisitions.append(acquisition_dict)
+    return all_acquisitions
 
 def validate_transactions(transactions):
     try: 
@@ -181,6 +199,8 @@ with MysqlDB(dbcfg) as db:
         db.execute(sql)
 
     split_dicts = get_splits_from_csv(csv_files['splits'])
+    print(drop_splits_table_sql)
+    db.execute(drop_splits_table_sql)   
     print(create_splits_table_sql)
     db.execute(create_splits_table_sql)
   
@@ -190,10 +210,21 @@ with MysqlDB(dbcfg) as db:
         db.execute(sql)
 
     entity_dicts = get_entities_from_csv(csv_files['entities'])
+    print(drop_entities_table_sql)
+    db.execute(drop_entities_table_sql)   
     print(create_entities_table_sql)
     db.execute(create_entities_table_sql)
       
     for entity_dict in entity_dicts:
         sql = insert_entities_sql.format(**entity_dict)
+        print(sql)
+        db.execute(sql)
+        
+    acquisition_dicts = get_acquisitions_from_csv(csv_files['acquisitions'])
+    print(create_acquisitions_table_sql)
+    db.execute(create_acquisitions_table_sql)
+  
+    for acquisition_dict in acquisition_dicts:
+        sql = insert_acquisitions_sql.format(**acquisition_dict)
         print(sql)
         db.execute(sql)

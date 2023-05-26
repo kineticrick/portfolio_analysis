@@ -46,7 +46,27 @@ def print_full(df):
 #     sorted_pairs = sorted(data.items())
 #     for k, v in sorted_pairs: 
 #         print(k, v)
+
+# Given a type of unit and count, return the start date in the past
+# For instance, "week, 2" would give the date 2 weeks ago
+def get_dates_from_desc(unit, count):
+    # Make sure unit is plural, to fulfill relativedelta arg requirements
+    unit = unit + "s" if unit[-1] != "s" else unit
     
+    assert(unit in ["days", "weeks", "months", "quarters", "years"])
+    assert(isinstance(count, int) and count > 0)
+    
+    if unit == "quarters":
+        unit = "months"
+        count = count * 3
+    
+    today = date.today()
+    date_shift_args = {unit: count * -1}
+    shift = relativedelta(**date_shift_args)
+    print(shift)
+    
+    return today + shift
+
 # For any given ticker, retrieve market data for the given time period
 # Returns close data (as opposed to open, high, low) by default
 def get_price_data(tickers, period=None, interval=None, 
@@ -62,10 +82,10 @@ def get_price_data(tickers, period=None, interval=None,
         ticker_info[symbol] = ticker.history(
             period=period, interval=interval, start=start, end=end)
     elif len(tickers) > 1:
-        tickers = yf.Tickers(ticker_str)
-        for sym,obj in tickers.tickers.items(): 
+        ticker_objs = yf.Tickers(ticker_str)
+        for sym,obj in ticker_objs.tickers.items():
             symbol = obj.info['symbol']
-            ticker_info[symbol] = obj.history(
+            ticker_info[symbol] = ticker_objs.tickers[symbol].history(
                 period=period, interval=interval, start=start, end=end)
     
     # Retrieve open or close data only (and keep as dataframe)
@@ -93,29 +113,11 @@ def get_summary_returns(tickers, unit="months", length=3,
     # Add percent change column to each dataframe
     data_type = "Close" if close else "Open"
     for symbol, data in raw_price_data.items():
+        raw_pct_change = data[data_type].pct_change() * 100
         raw_price_data[symbol]['Percent Change'] = \
-            data[data_type].pct_change()
+            round(raw_pct_change, 2)
         
     return raw_price_data
-
-# Given a type of unit and count, return the start date in the past
-# For instance, "week, 2" would give the date 2 weeks ago
-def get_dates_from_desc(unit, count):
-    # Make sure unit is plural, to fulfill relativedelta arg requirements
-    unit = unit + "s" if unit[-1] != "s" else unit
-    
-    assert(unit in ["days", "weeks", "months", "quarters", "years"])
-    assert(isinstance(count, int) and count > 0)
-    
-    if unit == "quarters":
-        unit = "months"
-        count = count * 3
-    
-    today = date.today()
-    date_shift_args = {unit: count * -1}
-    shift = relativedelta(**date_shift_args)
-    
-    return today + shift
     
 # For the interval and lengths specified, retrieve returns for each ticker
 # def get_returns(tickers, period="1mo", interval="1d", 
@@ -174,10 +176,20 @@ def get_dates_from_desc(unit, count):
 # print(get_dates_from_desc("years", 5))
 
         # ticker_info[symbol] = data['Close']
-out = get_summary_returns(["MSFT", "KO", "DIS", "REGN"], 
-                          unit="week", length=2, 
-                          interval="daily", close=True)
+        
+symbol = "SMH"
+out = get_summary_returns([symbol], 
+                          unit="years", length=1, 
+                          interval="weekly", close=True)
 
 for k, v in out.items():
     print(k)
+    print(type(v))
     print_full(v)
+
+df = out[symbol]
+
+import plotly.express as px 
+
+fig = px.line(df)
+fig.show()

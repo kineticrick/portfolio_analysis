@@ -1,4 +1,3 @@
-
 # importer
 create_trades_table_sql = \
     ("CREATE TABLE IF NOT EXISTS trades ("
@@ -19,10 +18,11 @@ create_dividends_table_sql = \
 
 create_splits_table_sql = \
     ("CREATE TABLE IF NOT EXISTS splits ("
-    "date DATE NOT NULL, "
+    "record_date DATE NOT NULL, "
+    "distribution_date DATE NOT NULL, "
     "symbol VARCHAR(4) NOT NULL, "
     "multiplier INT NOT NULL, "
-    "PRIMARY KEY (date, symbol, multiplier))")
+    "PRIMARY KEY (record_date, distribution_date, symbol, multiplier))")
 
 create_entities_table_sql = \
     ("CREATE TABLE IF NOT EXISTS entities ("
@@ -31,6 +31,14 @@ create_entities_table_sql = \
      "asset_type VARCHAR(100) NOT NULL, "
      "sector VARCHAR(100) NOT NULL, "
      "PRIMARY KEY (name, symbol, asset_type, sector))")
+    
+create_acquisitions_table_sql = \
+    ("CREATE TABLE IF NOT EXISTS acquisitions ("
+    "date DATE NOT NULL, "
+    "target VARCHAR(4) NOT NULL, "
+    "acquirer VARCHAR(4) NOT NULL, "
+    "conversion_ratio DECIMAL(13,5) NOT NULL, "
+    "PRIMARY KEY (date, target, acquirer, conversion_ratio))")
     
 insert_buysell_tx_sql = \
     ("INSERT IGNORE INTO trades"
@@ -47,12 +55,23 @@ insert_entities_sql = \
     ("INSERT IGNORE INTO entities"
      "(name, symbol, asset_type, sector) "
      "VALUES ('{name}','{symbol}','{asset_type}', '{sector}')")
+
+delete_entities_single_sql = \
+    ("DELETE FROM entities WHERE symbol = '{symbol}'")
     
 insert_splits_sql = \
     ("INSERT IGNORE INTO splits"
-     "(date, symbol, multiplier) "
-     "VALUES ('{date}','{symbol}','{multiplier}')")
-    
+     "(record_date, distribution_date, symbol, multiplier) "
+     "VALUES ('{record_date}', '{distribution_date}', '{symbol}', '{multiplier}')")
+
+insert_acquisitions_sql = \
+    ("INSERT IGNORE INTO acquisitions"
+     "(date, target, acquirer, conversion_ratio) "
+     "VALUES ('{date}','{target}', '{acquirer}', '{conversion_ratio}')")
+
+drop_splits_table_sql = "DROP TABLE IF EXISTS splits"
+drop_entities_table_sql = "DROP TABLE IF EXISTS entities"
+
 #gen_summary
 
 drop_summary_table_sql = "DROP TABLE IF EXISTS summary"
@@ -65,37 +84,37 @@ create_summary_table_sql = \
     "cost_basis DECIMAL(13, 2) NOT NULL, "
     "first_purchase_date DATE NOT NULL, "
     "last_purchase_date DATE NOT NULL, "
-    "has_dividend BOOLEAN NOT NULL, "
     "total_dividend DECIMAL(13, 2), "
+    "dividend_yield DECIMAL(3, 2), "
     "PRIMARY KEY (symbol, name))")
 
 insert_summary_sql = \
     ("INSERT INTO summary"
      "(symbol, name, current_shares, cost_basis, "
-     "first_purchase_date, last_purchase_date, has_dividend, total_dividend) "
-     "VALUES ('{symbol}','{name}','{current_shares}',{cost_basis},"
+     "first_purchase_date, last_purchase_date, total_dividend, dividend_yield) "
+     "VALUES ('{symbol}','{name}','{current_shares}','{cost_basis}',"
              "'{first_purchase_date}','{last_purchase_date}',"
-             "'{has_dividend}','{total_dividend}') " 
+             "'{total_dividend}', '{dividend_yield}') " 
      "ON DUPLICATE KEY UPDATE current_shares='{current_shares}'," 
-     "cost_basis={cost_basis},first_purchase_date='{first_purchase_date}',"
-     "last_purchase_date='{last_purchase_date}',has_dividend='{has_dividend}',"
-     "total_dividend='{total_dividend}'")
+     "cost_basis='{cost_basis}',first_purchase_date='{first_purchase_date}',"
+     "last_purchase_date='{last_purchase_date}',total_dividend='{total_dividend}',"
+     "dividend_yield='{dividend_yield}'")
 
-base_summary_query = \
-    ("SELECT t1.name, t1.symbol, t1.current_shares, t2.total_dividend FROM "
-        "(SELECT entities.name, trades.symbol, "
-        "SUM(COALESCE(CASE WHEN trades.action='buy' "
-                        "THEN trades.num_shares END, 0)) - "
-        "SUM(COALESCE(CASE WHEN trades.action='sell' "
-                        "THEN trades.num_shares END, 0)) "
-        "current_shares FROM trades INNER JOIN entities ON "
-        "entities.symbol = trades.symbol GROUP BY entities.name, trades.symbol "
-        "HAVING current_shares > 0 ORDER BY trades.symbol) AS t1 "
-        "LEFT JOIN "
-        "(SELECT dividends.symbol, SUM(dividends.dividend) total_dividend FROM "
-        "dividends GROUP BY dividends.symbol) AS t2 "
-    "ON t1.symbol=t2.symbol ORDER BY t1.name")
-base_summary_columns = ['Name', 'Symbol', 'CurrentShares', 'TotalDividend']
+# base_summary_query = \
+#     ("SELECT t1.name, t1.symbol, t1.current_shares, t2.total_dividend FROM "
+#         "(SELECT entities.name, trades.symbol, "
+#         "SUM(COALESCE(CASE WHEN trades.action='buy' "
+#                         "THEN trades.num_shares END, 0)) - "
+#         "SUM(COALESCE(CASE WHEN trades.action='sell' "
+#                         "THEN trades.num_shares END, 0)) "
+#         "current_shares FROM trades INNER JOIN entities ON "
+#         "entities.symbol = trades.symbol GROUP BY entities.name, trades.symbol "
+#         "HAVING current_shares > 0 ORDER BY trades.symbol) AS t1 "
+#         "LEFT JOIN "
+#         "(SELECT dividends.symbol, SUM(dividends.dividend) total_dividend FROM "
+#         "dividends GROUP BY dividends.symbol) AS t2 "
+#     "ON t1.symbol=t2.symbol ORDER BY t1.name")
+# base_summary_columns = ['Name', 'Symbol', 'CurrentShares', 'TotalDividend']
     
 stocks_with_sales_query = \
     ("SELECT t1.symbol, t1.bought, t2.sold, t1.bought-t2.sold as remaining FROM "
@@ -111,5 +130,32 @@ all_trades_columns = ['Date', 'Symbol', 'Action',
                       'NumShares', 'PricePerShare','TotalPrice']
 
 splits_query = "SELECT * FROM splits"
-splits_columns = ['Date', 'Symbol', 'Multiplier']
+splits_columns = ['Record_Date', 'Distribution_Date', 'Symbol', 'Multiplier']
 
+acquisitions_query = "SELECT * FROM acquisitions"
+acquisitions_columns = ['Date', 'Target', 'Acquirer', 'Conversion_Ratio']
+
+### Master Log Summary Method ###
+master_log_buys_query = \
+    "SELECT date, symbol, action, num_shares FROM trades WHERE action='buy'"
+master_log_buys_columns = ['Date', 'Symbol', 'Action', 'Quantity']
+
+master_log_sells_query = \
+    "SELECT date, symbol, action, num_shares FROM trades WHERE action='sell'"
+master_log_sells_columns = ['Date', 'Symbol', 'Action', 'Quantity']
+
+master_log_dividends_query = \
+    "SELECT date, symbol, 'dividend' as 'action', dividend FROM dividends"
+master_log_dividends_columns = ['Date', 'Symbol', 'Action', 'Dividend']
+                           
+master_log_splits_query = \
+    "SELECT distribution_date as 'date', symbol, 'split' as 'action', multiplier FROM splits"
+master_log_splits_columns = ['Date', 'Symbol', 'Action', 'Multiplier']
+
+master_log_acquisitions_query = \
+    "SELECT date, target, acquirer, 'acquisition' as 'action', conversion_ratio FROM acquisitions"
+master_log_acquisitions_columns = ['Date', 'Symbol', 'Acquirer', 'Action', 'Multiplier']
+
+# Get asset full name and symbol from entities table
+asset_name_query = "SELECT symbol,name FROM entities"
+asset_name_columns = ['Symbol', 'Name']
