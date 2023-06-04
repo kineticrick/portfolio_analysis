@@ -1,46 +1,20 @@
 #!/usr/bin/env python
 import argparse
 import numpy as np
+import os
 import pandas as pd
+import sys
+
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from collections import defaultdict
 from decimal import Decimal
 from libraries.dbcfg import *
 from libraries.pandas_helpers import * 
 from libraries.sql import *
+from libraries.helpers import build_master_log
 
 
-ASSET_ACTIONS = ['buy', 'sell', 'dividend', 'split', 'acquisition']
-MASTER_LOG_COLUMNS = ['Date', 'Symbol', 'Action', 'Quantity', 
-                      'Dividend', 'Multiplier', 'Acquirer']
-
-def build_master_log() -> pd.DataFrame:
-    """
-    For each ASSET_ACTION, retrieve log of each action as a dataframe, then 
-    merge each into a sorted master log
-
-    Returns:
-        pd.DataFrame: Single, chronologically sorted, master log of all actions,
-        across all assets 
-    """
-    # Master log of all actions
-    master_log_df = pd.DataFrame(columns=MASTER_LOG_COLUMNS)
-
-    # Retrieve log of each action as a dataframe, then 
-    # merge each into a sorted master log
-    for action in ASSET_ACTIONS:
-        query = globals()[f"master_log_{action}s_query"]
-        columns = globals()[f"master_log_{action}s_columns"]
-        
-        action_log_df = mysql_to_df(query, columns, dbcfg)
-        master_log_df = pd.concat([master_log_df, action_log_df], ignore_index=True)
-
-    # Sort master log chronologically
-    master_log_df = master_log_df.sort_values(by=['Date','Multiplier'], 
-                                              ascending=True,
-                                              ignore_index=True)
-
-    return master_log_df
 
 def process_master_log(master_log_df: pd.DataFrame) -> pd.DataFrame:
     """

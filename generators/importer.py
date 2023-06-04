@@ -4,6 +4,8 @@ import csv
 import os
 import sys
 
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
 from libraries.mysqldb import MysqlDB
 from datetime import datetime
 
@@ -125,7 +127,7 @@ def get_acquisitions_from_csv(csvfiles):
                 acquisition_dict = {}
                 row = {k.lower(): v for k, v in row.items()}
                 acquisition_dict['date'] = datetime.strptime(row.get('date'), "%m/%d/%Y").strftime("%Y-%m-%d")
-                acquisition_dict['target'] = row['target']
+                acquisition_dict['symbol'] = row['symbol']
                 acquisition_dict['acquirer'] = row['acquirer']
                 acquisition_dict['conversion_ratio'] = row['conversion_ratio']
                 

@@ -35,10 +35,10 @@ create_entities_table_sql = \
 create_acquisitions_table_sql = \
     ("CREATE TABLE IF NOT EXISTS acquisitions ("
     "date DATE NOT NULL, "
-    "target VARCHAR(4) NOT NULL, "
+    "symbol VARCHAR(4) NOT NULL, "
     "acquirer VARCHAR(4) NOT NULL, "
     "conversion_ratio DECIMAL(13,5) NOT NULL, "
-    "PRIMARY KEY (date, target, acquirer, conversion_ratio))")
+    "PRIMARY KEY (date, symbol, acquirer, conversion_ratio))")
     
 insert_buysell_tx_sql = \
     ("INSERT IGNORE INTO trades"
@@ -66,8 +66,8 @@ insert_splits_sql = \
 
 insert_acquisitions_sql = \
     ("INSERT IGNORE INTO acquisitions"
-     "(date, target, acquirer, conversion_ratio) "
-     "VALUES ('{date}','{target}', '{acquirer}', '{conversion_ratio}')")
+     "(date, symbol, acquirer, conversion_ratio) "
+     "VALUES ('{date}','{symbol}', '{acquirer}', '{conversion_ratio}')")
 
 drop_splits_table_sql = "DROP TABLE IF EXISTS splits"
 drop_entities_table_sql = "DROP TABLE IF EXISTS entities"
@@ -133,7 +133,7 @@ splits_query = "SELECT * FROM splits"
 splits_columns = ['Record_Date', 'Distribution_Date', 'Symbol', 'Multiplier']
 
 acquisitions_query = "SELECT * FROM acquisitions"
-acquisitions_columns = ['Date', 'Target', 'Acquirer', 'Conversion_Ratio']
+acquisitions_columns = ['Date', 'Symbol', 'Acquirer', 'Conversion_Ratio']
 
 ### Master Log Summary Method ###
 master_log_buys_query = \
@@ -153,7 +153,7 @@ master_log_splits_query = \
 master_log_splits_columns = ['Date', 'Symbol', 'Action', 'Multiplier']
 
 master_log_acquisitions_query = \
-    "SELECT date, target, acquirer, 'acquisition' as 'action', conversion_ratio FROM acquisitions"
+    "SELECT date, symbol, acquirer, 'acquisition' as 'action', conversion_ratio FROM acquisitions"
 master_log_acquisitions_columns = ['Date', 'Symbol', 'Acquirer', 'Action', 'Multiplier']
 
 # Get asset full name and symbol from entities table
