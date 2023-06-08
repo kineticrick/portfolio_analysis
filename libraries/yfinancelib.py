@@ -52,6 +52,7 @@ def get_price_data(tickers, start=None, end=None, interval=None):
     
     cadence = BUSINESS_CADENCE_MAP[interval]
     
+    prices_df = pd.DataFrame()
     for symbol, data in ticker_info.items(): 
         data.index = pd.to_datetime(data.index).date
         data.index.name = 'Date'
@@ -60,9 +61,10 @@ def get_price_data(tickers, start=None, end=None, interval=None):
         
         data = data.asfreq(cadence)
         data['Symbol'] = symbol
-        ticker_info[symbol] = data
+        prices_df = pd.concat([prices_df, data], ignore_index=False)
+        # ticker_info[symbol] = data
     
-    return ticker_info
+    return prices_df
 
 # For the ticker, unit and length specified, retrieve summary returns 
 # For instance, if unit is "months" and length is 3, returns the closing price
