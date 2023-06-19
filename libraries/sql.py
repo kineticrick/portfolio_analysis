@@ -159,3 +159,9 @@ master_log_acquisitions_columns = ['Date', 'Symbol', 'Acquirer', 'Action', 'Mult
 # Get asset full name and symbol from entities table
 asset_name_query = "SELECT symbol,name FROM entities"
 asset_name_columns = ['Symbol', 'Name']
+
+read_summary_table_query = "SELECT * FROM summary"
+read_summary_table_columns = ['Symbol', 'Name', 'Quantity', 'CostBasis',
+                              'FirstPurchaseDate', 'LastPurchaseDate', 
+                              'TotalDividend', 'DividendYield']
+                              
