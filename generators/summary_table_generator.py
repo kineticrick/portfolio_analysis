@@ -145,12 +145,12 @@ def integrate_brokerage_data(summary_df: pd.DataFrame,
             continue
         
         # Merge brokerage Cost Basis into summary  
-        cost_basis = brokerage_asset_info['CostBasis'].values[0]
-        summary_df.loc[summary_df['Symbol'] == symbol, 'CostBasis'] = cost_basis
+        cost_basis = brokerage_asset_info['Cost Basis'].values[0]
+        summary_df.loc[summary_df['Symbol'] == symbol, 'Cost Basis'] = cost_basis
 
         # Merge brokerage dividend yield into summary  
-        dividend_yield= brokerage_asset_info['DividendYield'].values[0].rstrip('%')
-        summary_df.loc[summary_df['Symbol'] == symbol, 'DividendYield'] = \
+        dividend_yield = brokerage_asset_info['Dividend Yield'].values[0].rstrip('%')
+        summary_df.loc[summary_df['Symbol'] == symbol, 'Dividend Yield'] = \
             dividend_yield
             
     return summary_df
@@ -179,11 +179,11 @@ def write_db(summary_df: pd.DataFrame, verbose: bool) -> None:
             insertion_dict['symbol'] = asset['Symbol']
             insertion_dict['name'] = asset['Name']
             insertion_dict['current_shares'] = asset['Quantity']
-            insertion_dict['cost_basis'] = asset['CostBasis']
+            insertion_dict['cost_basis'] = asset['Cost Basis']
             insertion_dict['first_purchase_date'] = asset['First Date Purchased']
             insertion_dict['last_purchase_date'] = asset['Last Date Purchased']
             insertion_dict['total_dividend'] = asset['Total Dividend']
-            insertion_dict['dividend_yield'] = asset['DividendYield']
+            insertion_dict['dividend_yield'] = asset['Dividend Yield']
             
             sql = insert_summary_sql.format(**insertion_dict)
             if verbose: 

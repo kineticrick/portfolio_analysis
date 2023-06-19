@@ -9,7 +9,7 @@ import plotly.express as px
 
 from libraries.pandas_helpers import *
 from libraries.helpers import gen_asset_historical_value 
-from libraries.yfinancelib import get_price_data, get_summary_returns
+from libraries.yfinancelib import get_historical_prices, get_summary_returns
 
 symbols = ['MSFT','DIS']
 # symbols = ['MSFT', 'KO', 'DIS', 'REGN', 'SMH', 'AAPL', 'AMZN', 'GOOG', 'META','NVDA']

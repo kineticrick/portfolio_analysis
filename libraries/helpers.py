@@ -9,9 +9,9 @@ import pandas as pd
 
 from collections import defaultdict
 from libraries.dbcfg import *
-from libraries.pandas_helpers import * 
+from libraries.pandas_helpers import print_full, mysql_to_df
 from libraries.sql import *
-from libraries.yfinancelib import get_price_data
+from libraries.yfinancelib import get_historical_prices, get_current_price
 from libraries.vars import (QUANTITY_ASSET_EVENTS, ASSET_EVENTS, 
                             MASTER_LOG_COLUMNS, CADENCE_MAP, 
                             BUSINESS_CADENCE_MAP)
@@ -180,8 +180,8 @@ def gen_hist_quantities_mult(assets_event_log_df: pd.DataFrame,
                                   )
     return quantities_df
 
-def gen_assets_historical_value(symbols: str, 
-                                cadence: str=None) -> pd.DataFrame:
+def gen_assets_historical_value(symbols: str=[], 
+                                cadence: str='quarterly') -> pd.DataFrame:
     """ 
     Provide lifetime value of asset within portfolio over time
     Takes quantity of shares, and asset price at that time, to calculate
@@ -198,7 +198,7 @@ def gen_assets_historical_value(symbols: str,
     # Get master event log for asset 
     assets_event_log_df = build_master_log(symbols)
     
-    # Get historical share quantities of asset
+    # Get historical share quantities of assets
     quantities_df = gen_hist_quantities_mult(assets_event_log_df, 
                                               cadence=cadence)
 
@@ -212,16 +212,24 @@ def gen_assets_historical_value(symbols: str,
     first_date = sorted_quantities_df.index[0]
     last_date = sorted_quantities_df.index[-1]
 
+    # Only use the symbols found in our transactions data
+    # This should be identical to those passed in, but just in case
+    returned_symbols = list(quantities_df['Symbol'].unique())
+    
     # Get historical prices of assets
-    prices_df = get_price_data(tickers=symbols, 
+    prices_df = get_historical_prices(tickers=returned_symbols, 
                                 start=first_date, end=last_date,
                                 interval=cadence)
     
+
     # Standardize quantities and prices dataframes
     quantities_df = quantities_df.reset_index()
     prices_df = prices_df.reset_index()
     quantities_df = quantities_df.rename(columns={'index': 'Date'})
     prices_df = prices_df.rename(columns={'index': 'Date'})
+    
+    # Only keep needed columns from price data
+    prices_df = prices_df[['Date', 'Symbol', 'Close']]
 
     # Merge quantities and prices
     merged_df = \
@@ -236,6 +244,43 @@ def gen_assets_historical_value(symbols: str,
     
     return merged_df
 
+def get_portfolio_summary() -> pd.DataFrame:
+    """ 
+    Retrieve summary table of entire portfolio
+
+    Returns: 
+        portfolio_summary_df: Symbol, Name, Quantity, Cost Basis, 
+                              First Purchase Date, Last Purchase Date, 
+                              Total Dividend, Dividend Yield 
+    """
+    
+    portfolio_summary_df = \
+        mysql_to_df(read_summary_table_query, read_summary_table_columns, dbcfg)
+    
+    return portfolio_summary_df
+    
+    
+def get_portfolio_current_value() -> tuple[pd.DataFrame, float]:
+    """ 
+    Retrieve total value of entire portfolio at current time
+    Returns:
+        summary_df: (See get_portfolio_summary()) + Current Price, Current Value
+        total_value: Total value of portfolio, as float
+    """
+    
+    summary_df = get_portfolio_summary()
+    symbols = list(summary_df['Symbol'].unique())
+    
+    current_prices = get_current_price(symbols)
+
+    summary_df = summary_df.merge(current_prices, on='Symbol', how='left')
+    summary_df['Current Value'] = summary_df['Quantity'] * summary_df['Current Price']
+
+    total_value = summary_df['Current Value'].sum()
+    
+    return (summary_df, total_value)
+
+
 dup_symbols = [
     'SNAP',
     'META',
@@ -248,12 +293,39 @@ symbols = [
            'META', 
            'NFLX', 'DIS','AMZN',
            ]
-out = gen_assets_historical_value(symbols, cadence='quarterly')
-print_full(out)
 
 # TODO: BUILDIN ERROR HANDLING
 # Symbols that don't exist
 # Symbols that don't have any data
-# 
-# out = build_master_log(dup_symbols)
 
+# out = build_master_log()
+# out = gen_assets_historical_value(['msft', 'WEED', 'MGP', 'DRE'], cadence='quarterly')
+# out = gen_assets_historical_value(cadence='daily')
+# print_full(out)
+# out.to_csv('daily_asset_values.csv', index=False)
+
+
+# csv_df.to_csv('test.csv', index=False)
+
+# daily_values_cf = pd.read_csv('daily_asset_values.csv')
+# num_symbols = len(daily_values_cf['Symbol'].unique())
+
+# global_daily_values = daily_values_cf.groupby('Date')['Value'].sum()
+# print(isinstance(global_daily_values, pd.Series))
+# print(isinstance(daily_values_cf, pd.DataFrame))
+# print_full(global_daily_values)
+
+# import plotly.express as px 
+# fig = px.line(global_daily_values, x=global_daily_values.index, y=global_daily_values.values)
+# fig.show()
+
+# summ_df = get_portfolio_summary()
+# print_full(summ_df)
+
+# val_df, total_val = get_portfolio_current_value()
+
+# print_full(val_df)
+# print(total_val)
+
+out = build_master_log(['DRE', 'PLD', 'MGP', 'VICI'])
+print_full(out)

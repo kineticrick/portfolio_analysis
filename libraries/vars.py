@@ -18,5 +18,17 @@ BUSINESS_CADENCE_MAP = {
     'weekly': 'W-FRI',
     'monthly': 'BM',
     'quarterly': 'BQ',
+    'half-yearly': '2BQ',
     'yearly': 'BY',
 }
+
+# Symbols which are not currently listed
+SYMBOL_BLACKLIST = [
+    'MGP',
+    'DRE',
+    'STOR',
+    'BF.B',
+    'CONE',
+    'DIDI',
+    'QTS'
+]
