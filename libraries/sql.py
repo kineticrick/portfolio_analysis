@@ -165,3 +165,30 @@ read_summary_table_columns = ['Symbol', 'Name', 'Quantity', 'CostBasis',
                               'FirstPurchaseDate', 'LastPurchaseDate', 
                               'TotalDividend', 'DividendYield']
                               
+                              
+# HistoryHelper
+create_assets_history_table_sql = \
+    ("CREATE TABLE IF NOT EXISTS assets_history ("
+    "date DATE NOT NULL, "
+    "symbol VARCHAR(4) NOT NULL, "
+    "quantity INT NOT NULL, "
+    "closing_price DECIMAL(13, 2) NOT NULL, "
+    "value DECIMAL(13, 2) NOT NULL, "
+    "PRIMARY KEY (date, symbol))")
+    
+insert_ignore_assets_history_sql = \
+    ("INSERT IGNORE INTO assets_history"
+     "(date, symbol, quantity, closing_price, value) "
+     "VALUES ('{date}','{symbol}', '{quantity}', '{closing_price}', '{value}')")
+    
+insert_update_assets_history_sql = \
+    ("INSERT INTO assets_history"
+     "(date, symbol, quantity, closing_price, value) "
+     "VALUES ('{date}','{symbol}', '{quantity}', '{closing_price}', '{value}') "
+     "ON DUPLICATE KEY UPDATE "
+     "date='{date}', symbol='{symbol}', quantity='{quantity}', "
+     "closing_price='{closing_price}', value='{value}'")
+    
+read_assets_history_query = "SELECT * FROM assets_history"
+read_assets_history_columns = ['Date', 'Symbol', 'Quantity', 'ClosingPrice', 'Value']
+

@@ -95,6 +95,8 @@ def get_historical_prices(tickers: list, start: str=None,
         data['Symbol'] = symbol
         prices_df = pd.concat([prices_df, data], ignore_index=False)
     
+    prices_df = prices_df.round(2)
+    
     return prices_df
 
 def get_current_price(tickers: list) -> pd.DataFrame:
@@ -143,7 +145,7 @@ def get_summary_returns(tickers, unit="months", length=3,
         
     return raw_price_data
 
-# symbols = ['MSFT', 'AAPL', 'meta']
+# symbols = ['MSFT']
 
 # ticker_info = get_tickers_from_yfinance(symbols)
 
