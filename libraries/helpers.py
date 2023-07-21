@@ -19,6 +19,9 @@ from libraries.vars import (NON_QUANTITY_ASSET_EVENTS, ASSET_EVENTS,
                             BUSINESS_CADENCE_MAP)
 from pandas.tseries.offsets import BDay
 
+from diskcache import Cache
+cache = Cache('cache')
+
 def build_master_log(symbols: list=[]) -> pd.DataFrame:
     """
     For each ASSET_EVENT, retrieve log of each event as a dataframe, then 
@@ -207,7 +210,7 @@ def gen_hist_quantities(asset_event_log_df: pd.DataFrame,
         quantities_df['Symbol'] = quantities_df['Symbol'].fillna(method='ffill')
         
         # Downsample to specified cadence
-        quantities_df = quantities_df.asfreq(BUSINESS_CADENCE_MAP[cadence])
+        # quantities_df = quantities_df.asfreq(BUSINESS_CADENCE_MAP[cadence])
         
     if "Date" in quantities_df.columns: 
         quantities_df = quantities_df.set_index('Date')
@@ -261,7 +264,8 @@ def get_asset_quantity_by_date(symbols: list, date: str) -> pd.DataFrame:
 
 def gen_assets_historical_value(symbols: list=[], 
                                 cadence: str='quarterly',
-                                start_date: str=None) -> pd.DataFrame:
+                                start_date: str=None,
+                                include_exit_date=True) -> pd.DataFrame:
     """ 
     Provide lifetime value of asset within portfolio over time
     Takes quantity of shares, and asset price at that time, to calculate
@@ -269,6 +273,10 @@ def gen_assets_historical_value(symbols: list=[],
     
     Can be used to generate historical daily value of every asset every owned 
     (and, by extension, full portfolio)
+    
+    If "include_exit_date" is True, then the last date of the asset's possession, when 
+    quantity goes to 0, will be included.  If False, then the last date will be the
+    final date on which a non-zero amount of shares was held at close of the day. 
     
     Returns: merged_df -> 
     Date, Symbol, Quantity, Close, Value (Quantity * Close)
@@ -292,7 +300,7 @@ def gen_assets_historical_value(symbols: list=[],
 
     sorted_quantities_df = \
         quantities_df.sort_index(ascending=True)
-            
+        
     # Get first and last dates to query historical prices for all assets
     # Once we have superset of all dates for all assets, can pull subset
     # for just the dates we owned the asset. Much faster to pull all prices
@@ -307,31 +315,35 @@ def gen_assets_historical_value(symbols: list=[],
     # Get historical prices of assets
     prices_df = get_historical_prices(tickers=returned_symbols, 
                                 start=first_date, end=last_date,
-                                interval=cadence)
+                                interval=cadence, cleaned_up=True)
     
-
     # Standardize quantities and prices dataframes
     quantities_df = quantities_df.reset_index()
-    prices_df = prices_df.reset_index()
+    # prices_df = prices_df.reset_index()
     quantities_df = quantities_df.rename(columns={'index': 'Date'})
-    prices_df = prices_df.rename(columns={'index': 'Date'})
+    # prices_df = prices_df.rename(columns={'index': 'Date'})
     
     # Only keep needed columns from price data
-    prices_df = prices_df[['Date', 'Symbol', 'Close']]
+    # prices_df = prices_df[['Date', 'Symbol', 'ClosingPrice']]
 
     # Merge quantities and prices
     merged_df = \
         quantities_df.merge(prices_df, 
-                            on=['Date','Symbol'], how='left')
+                            on=['Date','Symbol'], how='inner')    
         
     # Calculate value of asset at each date
-    merged_df['Value'] = merged_df['Quantity'] * merged_df['Close']
+    merged_df['Value'] = merged_df['Quantity'] * merged_df['ClosingPrice']
     
     # Round to 2 decimal places
     merged_df = merged_df.round(2)
     
-    # Remove NaN rows
-    merged_df = merged_df.dropna(how='any')
+    # Fill in missing values with previous value, to cover weekends + holidays
+    merged_df = merged_df.fillna(method='ffill')
+    
+    # Remove all rows with quantity=0 (ie days on which the asset was sold and went to 0)
+    # Should only be 1 row per exited asset 
+    if not include_exit_date: 
+        merged_df = merged_df[merged_df['Quantity'] != 0]
     
     return merged_df
 
@@ -350,7 +362,9 @@ def get_portfolio_summary() -> pd.DataFrame:
     
     return portfolio_summary_df
     
-    
+# Cache for 1 hour, since it takes a bit of time to get current prices for 
+# all assets in portfolio
+@cache.memoize(expire=60*60*1)    
 def get_portfolio_current_value() -> tuple[pd.DataFrame, float]:
     """ 
     Retrieve total value of entire portfolio at current time
@@ -367,7 +381,7 @@ def get_portfolio_current_value() -> tuple[pd.DataFrame, float]:
     summary_df = summary_df.merge(current_prices, on='Symbol', how='left')
     summary_df['Current Value'] = summary_df['Quantity'] * summary_df['Current Price']
 
-    total_value = summary_df['Current Value'].sum()
+    total_value = round(summary_df['Current Value'].sum(), 2)
     
     return (summary_df, total_value)
 
@@ -388,50 +402,3 @@ symbols = [
 # TODO: BUILDIN ERROR HANDLING
 # Symbols that don't exist
 # Symbols that don't have any data
-
-# out = build_master_log()
-# out = gen_assets_historical_value(['msft', 'WEED', 'MGP', 'DRE'], cadence='quarterly')
-# out = gen_assets_historical_value(cadence='daily')
-# print_full(out)
-# out.to_csv('daily_asset_values.csv', index=False)
-
-
-# csv_df.to_csv('test.csv', index=False)
-
-# daily_values_cf = pd.read_csv('daily_asset_values.csv')
-# num_symbols = len(daily_values_cf['Symbol'].unique())
-
-# global_daily_values = daily_values_cf.groupby('Date')['Value'].sum()
-# print(isinstance(global_daily_values, pd.Series))
-# print(isinstance(daily_values_cf, pd.DataFrame))
-# print_full(global_daily_values)
-
-# import plotly.express as px 
-# fig = px.line(global_daily_values, x=global_daily_values.index, y=global_daily_values.values)
-# fig.show()
-
-# summ_df = get_portfolio_summary()
-# print_full(summ_df)
-
-# val_df, total_val = get_portfolio_current_value()
-
-# print_full(val_df)
-# print(total_val)
-
-# out = build_master_log(['DRE', 'PLD', 'MGP', 'VICI'])
-# print_full(out)
-
-# out = gen_assets_historical_value(['MSFT', 'META'], cadence='weekly', start_date='2023-05-01')
-# print_full(out)
-
-# symbols = ['VICI','MGP']
-
-# logs = build_master_log(symbols)
-# print_full(logs)
-# out = gen_hist_quantities_mult(logs, cadence='daily', expand_chronology=False)
-# print_full(out)
-
-# out = get_asset_quantity_by_date(symbols, '2020-08-11')
-
-# print_full(out)
-
