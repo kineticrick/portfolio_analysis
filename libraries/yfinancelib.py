@@ -12,7 +12,7 @@ from collections import defaultdict
 from datetime import date
 from dateutil.relativedelta import relativedelta
 from libraries.pandas_helpers import * 
-from libraries.vars import BUSINESS_CADENCE_MAP, SYMBOL_BLACKLIST
+from libraries.vars import BUSINESS_CADENCE_MAP, CADENCE_MAP, SYMBOL_BLACKLIST
 
 # Given a type of unit and count, return the start date in the past
 # For instance, "week, 2" would give the date 2 weeks ago
@@ -64,12 +64,17 @@ def get_tickers_from_yfinance(tickers: list) -> dict:
     return ticker_info
 
 def get_historical_prices(tickers: list, start: str=None, 
-                   end: str=None, interval: str=None) -> pd.DataFrame:
+                   end: str=None, interval: str=None, 
+                   cleaned_up: bool=True) -> pd.DataFrame:
     """ 
     # For any given ticker, retrieve market data for the given time period and interval
     # 
+    # If "cleaned_up" is set, df will be returned with only closing price, and
+    # non-trading days filled in (weekends, holidays)
+    #
     # Returns:
     #   prices_df: Date, Open, High, Low, Close, Volume, Symbol 
+    #   priced_df(cleaned up): Date, Symbol, ClosingPrice
     """    
     prices = {}
     
@@ -78,24 +83,48 @@ def get_historical_prices(tickers: list, start: str=None,
     
     # Get historical price data for each ticker
     for symbol, ticker_obj in ticker_objs.items():
-        prices[symbol] = ticker_obj.history(start=start, end=end, actions=False)
-    
-    cadence = BUSINESS_CADENCE_MAP[interval]
+        prices[symbol] = ticker_obj.history(start=start, end=end, 
+                                            actions=False, timeout=60)
     
     prices_df = pd.DataFrame()
     
     # Add date index and symbol column to each dataframe
     for symbol, data in prices.items(): 
-        data.index = pd.to_datetime(data.index).date
-        data.index.name = 'Date'
-        data.index = pd.to_datetime(data.index)
-        data = data.set_index(data.index)
-        
-        data = data.asfreq(cadence)
         data['Symbol'] = symbol
+        data = data.reset_index()
+        data['Date'] = pd.to_datetime(data['Date']).dt.date
+                
+        if cleaned_up:
+            # Keep only closing price column 
+            data = data.rename(columns={'Close': 'ClosingPrice'})
+            data = data[['Date', 'Symbol', 'ClosingPrice']]
+
+            # Expand to capture all days (weekends, holidays, etc)
+            first_date = data['Date'].min()
+            # Use 'end' as the final date, to account for weirdness where the final date of 
+            # holding is on a monday, and the last trading day is the friday before
+            # This prevents bgi gaps in the merged df when it joins 
+            last_date = end if end is not None else date.today()
+            date_range = pd.date_range(start=first_date, end=last_date, freq='D')
+            data = data.set_index('Date').reindex(date_range)
+            
+            # Fill in gaps with previous day's data
+            data[['Symbol', 'ClosingPrice']] = \
+                data[['Symbol','ClosingPrice']].fillna(method='ffill')
+                
+            cadence = CADENCE_MAP[interval]
+        else: 
+            data = data.set_index('Date')
+            cadence = BUSINESS_CADENCE_MAP[interval]
+                
+        data = data.asfreq(cadence)
+        data = data.dropna()
+
         prices_df = pd.concat([prices_df, data], ignore_index=False)
     
     prices_df = prices_df.round(2)
+    prices_df = prices_df.reset_index()
+    prices_df = prices_df.rename(columns={'index': 'Date'}) 
     
     return prices_df
 
@@ -118,6 +147,8 @@ def get_current_price(tickers: list) -> pd.DataFrame:
             'Symbol': symbol,
             'Current Price': current_price
         })
+        
+    
                         
     return pd.DataFrame(current_prices)
     
@@ -144,19 +175,3 @@ def get_summary_returns(tickers, unit="months", length=3,
                 round(raw_pct_change, 2)
         
     return raw_price_data
-
-# symbols = ['MSFT']
-
-# ticker_info = get_tickers_from_yfinance(symbols)
-
-# print(ticker_info)
-
-# prices = get_historical_prices(symbols, interval="daily")
-# prices = get_current_price(symbols)
-# print_full(prices)
-
-
-# a = yf.Ticker('QQQ')
-
-# for k, v in a.info.items():
-#     print("{}: {}".format(k, v))

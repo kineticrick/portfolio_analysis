@@ -166,7 +166,7 @@ read_summary_table_columns = ['Symbol', 'Name', 'Quantity', 'CostBasis',
                               'TotalDividend', 'DividendYield']
                               
                               
-# HistoryHelper
+# HistoryHelper - assets_history table
 create_assets_history_table_sql = \
     ("CREATE TABLE IF NOT EXISTS assets_history ("
     "date DATE NOT NULL, "
@@ -192,3 +192,47 @@ insert_update_assets_history_sql = \
 read_assets_history_query = "SELECT * FROM assets_history"
 read_assets_history_columns = ['Date', 'Symbol', 'Quantity', 'ClosingPrice', 'Value']
 
+#HistoryHelper - portfolio_history table
+create_portfolio_history_table_sql = \
+    ("CREATE TABLE IF NOT EXISTS portfolio_history ("
+    "date DATE NOT NULL, "
+    "value DECIMAL(13, 2) NOT NULL, "
+    "PRIMARY KEY (date))")
+    
+insert_ignore_portfolio_history_sql = \
+    ("INSERT IGNORE INTO portfolio_history"
+     "(date, value) VALUES ('{date}','{value}')")
+    
+insert_update_portfolio_history_sql = \
+    ("INSERT INTO portfolio_history"
+     "(date, value) VALUES ('{date}','{value}') "
+     "ON DUPLICATE KEY UPDATE date='{date}', value='{value}'")
+    
+read_portfolio_history_query = "SELECT * FROM portfolio_history"
+read_portfolio_history_columns = ['Date', 'Value']
+
+# HistoryHelper - assets_hypothetical_history table
+create_assets_hypothetical_history_table_sql = \
+    ("CREATE TABLE IF NOT EXISTS assets_hypothetical_history ("
+    "date DATE NOT NULL, "
+    "symbol VARCHAR(4) NOT NULL, "
+    "quantity INT NOT NULL, "
+    "closing_price DECIMAL(13, 2) NOT NULL, "
+    "value DECIMAL(13, 2) NOT NULL, "
+    "PRIMARY KEY (date, symbol))")
+    
+insert_ignore_assets_hypothetical_history_sql = \
+    ("INSERT IGNORE INTO assets_hypothetical_history"
+     "(date, symbol, quantity, closing_price, value) "
+     "VALUES ('{date}','{symbol}','{quantity}','{closing_price}','{value}')")
+    
+insert_update_assets_hypothetical_history_sql = \
+    ("INSERT INTO assets_hypothetical_history"
+     "(date, symbol, quantity, closing_price, value) "
+     "VALUES ('{date}','{symbol}', '{quantity}','{closing_price}','{value}') "
+     "ON DUPLICATE KEY UPDATE "
+     "date='{date}',symbol='{symbol}',quantity='{quantity}', "
+     "closing_price='{closing_price}',value='{value}'")
+    
+read_assets_hypothetical_history_query = "SELECT * FROM assets_hypothetical_history"
+read_assets_hypothetical_history_columns = ['Date', 'Symbol', 'Quantity', 'ClosingPrice', 'Value']
