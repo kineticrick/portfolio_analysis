@@ -6,6 +6,8 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 import pandas as pd
 
 from libraries.mysqldb import MysqlDB
+from diskcache import Cache
+cache = Cache("cache")
 
 TDAMERITRADE_CSV_TO_DB_COL_NAMES = {
     "Qty": "Quantity",
@@ -54,17 +56,25 @@ def print_full(df):
     pd.reset_option('display.max_columns')
     pd.reset_option('display.width')
 
-def mysql_to_df(query, columns, dbcfg, verbose=False): 
+@cache.memoize(expire=60*60*1)
+def mysql_query(query, dbcfg):
+    with MysqlDB(dbcfg) as db:
+        return db.query(query)
+
+def mysql_to_df(query, columns, dbcfg, cached=False, verbose=False): 
     """
     Convert results of mysql query to a pandas dataframe
     """
     if verbose:
         print(f"Query: {query}")
         print(f"Columns: {', '.join(columns)}")
-    
-    with MysqlDB(dbcfg) as db:
-        mysql_res = db.query(query)
 
+    if cached:
+        mysql_func = mysql_query
+    else: 
+        mysql_func = mysql_query.__wrapped__
+
+    mysql_res = mysql_func(query, dbcfg)    
     df_data = [list(tup) for tup in mysql_res]
     df = pd.DataFrame(df_data, columns=columns)
     

@@ -59,7 +59,7 @@ def build_master_log(symbols: list=[]) -> pd.DataFrame:
 
         columns = globals()[f"master_log_{event}s_columns"]
 
-        event_log_df = mysql_to_df(query, columns, dbcfg)
+        event_log_df = mysql_to_df(query, columns, dbcfg, cached=True)
         master_log_df = pd.concat([master_log_df, event_log_df], ignore_index=True)
 
     # Acquisition events are stored in the master log as two separate events,
@@ -358,7 +358,8 @@ def get_portfolio_summary() -> pd.DataFrame:
     """
     
     portfolio_summary_df = \
-        mysql_to_df(read_summary_table_query, read_summary_table_columns, dbcfg)
+        mysql_to_df(read_summary_table_query, read_summary_table_columns, dbcfg, 
+                    cached=True)
     
     return portfolio_summary_df
     
@@ -386,18 +387,29 @@ def get_portfolio_current_value() -> tuple[pd.DataFrame, float]:
     return (summary_df, total_value)
 
 
-dup_symbols = [
-    'SNAP',
-    'META',
-    'HD',
-]
-
-symbols = [
-    'MSFT', 
-    'V',
-           'META', 
-           'NFLX', 'DIS','AMZN',
-           ]
+def add_asset_info(asset_df: pd.DataFrame, truncate=True) -> pd.DataFrame:
+    """
+    Given a dataframe of assets, add additional information* about each asset
+    Info = Company Name, Sector, Asset Type (Common Stock, ETF, REIT)
+    
+    If truncate is True, all strings will be truncated to 20 characters
+    
+    Returns: asset_df 
+        {Original DF}, Company Name, Sector, Asset Type
+    """
+    
+    assert('Symbol' in asset_df.columns)
+    
+    asset_info_df = mysql_to_df(
+        read_entities_table_query, read_entities_table_columns, 
+        dbcfg, cached=True)
+        
+    for col in asset_info_df.select_dtypes(include='object'):
+        asset_info_df[col] = asset_info_df[col].str.slice(0, 20)
+        
+    asset_df = asset_df.merge(asset_info_df, on='Symbol', how='left')
+    
+    return asset_df
 
 # TODO: BUILDIN ERROR HANDLING
 # Symbols that don't exist
