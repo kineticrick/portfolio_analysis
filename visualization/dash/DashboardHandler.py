@@ -5,14 +5,20 @@ import sys
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '../..'))
 
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
+
 import pandas as pd
 import numpy as np
 from pandas.tseries.offsets import DateOffset
 from libraries.pandas_helpers import print_full
-from libraries.helpers import get_portfolio_current_value
+from libraries.helpers import (get_portfolio_current_value, add_asset_info)
 
 from libraries.HistoryHandler import (PortfolioHistoryHandler, 
-                                      AssetHistoryHandler)
+                                      AssetHistoryHandler, 
+                                      AssetHypotheticalHistoryHandler)
+
+import time
 
 class DashboardHandler:
     def __init__(self) -> None:
@@ -29,7 +35,7 @@ class DashboardHandler:
             ('5y', 1825),
             # Lifetime will also be added when milestones are generated
         ]
-        
+
         # Get and Set current portfolio value
         portfolio_summary_df, portfolio_value = get_portfolio_current_value()
         self.current_portfolio_summary_df = portfolio_summary_df
@@ -37,7 +43,7 @@ class DashboardHandler:
     
         # Get and Set portfolio history
         ph = PortfolioHistoryHandler()
-        self.portfolio_history_df = ph.get_history()
+        self.portfolio_history_df = ph.history_df
 
         # Index by date - can be done here since portfolio history 
         # has a single set of unique dates (no duplicates)
@@ -49,15 +55,33 @@ class DashboardHandler:
         self.portfolio_history_df.loc[pd.to_datetime('today')] = \
             self.current_portfolio_value
         
+
         # Get and set assets history
         ah = AssetHistoryHandler()
-        self.assets_history_df = ah.get_history()
+
+        self.assets_history_df = ah.history_df
+
 
         # Get and set portfolio milestones
         self.portfolio_milestones = self.get_portfolio_milestones()
         
         # Get and set asset milestones
         self.asset_milestones = self.get_asset_milestones()
+        
+
+        # Get and set assets hypothetical history for all exited assets
+        ahh = AssetHypotheticalHistoryHandler()
+
+        self.assets_hypothetical_history_df = ahh.history_df
+
+        
+        # Split into actuals and hypotheticals, to make it possibly easier when needed
+        self.exits_actuals_history_df = self.assets_hypothetical_history_df.loc[
+            (self.assets_hypothetical_history_df['Owned'] == 'Actual')]
+        self.exits_hypotheticals_history_df = self.assets_hypothetical_history_df.loc[
+            (self.assets_hypothetical_history_df['Owned'] == 'Hypothetical')]
+        
+
         
     def _gen_performance_milestones(self, history_df: pd.DataFrame, current_value: float,
                                     current_price: float=None,  
@@ -134,7 +158,6 @@ class DashboardHandler:
                 / milestones_df['Value'] * 100, 2)
 
         if current_price is not None:
-            
             milestones_df['Price'] = milestones_df['Price'].astype(float)
             # Generate % improvement from each milestone to current value
             milestones_df['Price % Return'] = round(
@@ -214,3 +237,181 @@ class DashboardHandler:
             ranked_assets_df = ranked_assets_df.head(count)
         
         return ranked_assets_df
+    
+    def _gen_pct_change_cols(self, history_df: pd.DataFrame, 
+                       column_names: list) -> pd.DataFrame:
+        """
+        Given a history dataframe with a single set of unique dates + symbol, 
+        generate a column for % change
+        """
+        for column_name in column_names:
+            history_df[column_name] = history_df[column_name].astype(float)
+            history_df[column_name + ' % Change'] = \
+                round((history_df[column_name] - history_df[column_name][0]) / 
+                    history_df[column_name][0] * 100, 2)
+        
+        return history_df
+    
+    def _add_pct_change(self, history_df: pd.DataFrame, 
+                       column_names: list) -> pd.DataFrame:
+        """
+        Given a history dataframe with multiple symbols (and overlapping dates),), 
+        generate a column for % change for each symbol
+        """
+        master_df = pd.DataFrame()
+        
+        symbols = list(history_df['Symbol'].unique())
+        
+        for symbol in symbols :
+            symbol_df = history_df.loc[history_df['Symbol'] == symbol]
+            symbol_df = symbol_df.sort_values(by='Date') \
+                if 'Date' in symbol_df else symbol_df.sort_index()
+            symbol_df = symbol_df.reset_index(drop=True)
+            symbol_df = self._gen_pct_change_cols(symbol_df, column_names)
+            master_df = pd.concat([master_df, symbol_df])
+
+
+        return master_df
+    
+    def expand_history_df(self, history_df: pd.DataFrame) -> pd.DataFrame:
+        """ 
+        Given a base history dataframe, containing historical quantities, prices and 
+        values for multiple symbols (each with varying dates), add in the following info: 
+            - Percent return for each period from the initial value (Price)
+            - Percent return for each period from the initial value (Value)
+            - Info on the asset (Company or Asset Name, Sector, Asset Type)
+            
+        Columns added:
+            ClosingPrice % Change, Value % Change
+            Name, Asset Type, Sector
+        """
+        column_names = []
+        if "ClosingPrice" in history_df:
+            column_names.append("ClosingPrice")
+
+        if "Value" in history_df:
+            column_names.append("Value")
+
+        history_df = self._add_pct_change(history_df, column_names)
+        history_df = add_asset_info(history_df)
+        
+        return history_df
+    
+    def gen_historical_stats(self, history_df: pd.DataFrame, 
+                             hypotheticals: bool=False) -> pd.DataFrame:
+        """ 
+        For each symbol (and its history) in history_df, generate the 
+        following set of statistics
+        
+        History_df can be either actuals, or actuals + hypotheticals
+        
+        Default: 
+            - Total/Lifetime Return (Return %, purchase -> current)
+            - Max return %, purchase -> current
+            - Average Return (Daily)
+            - Annualized Return
+            - Standard Deviation
+            - Sharpe Ratio
+            - Sortino Ratio
+        Hypotheticals
+            - Return %, exit -> current
+            - Return %, purchase -> current
+            - Max return %, exit -> current
+            - Max return %, purchase -> current
+        """
+        
+        # If we're dealing with hypotheticals, split into actuals and hypotheticals
+        if hypotheticals and "Owned" in history_df: 
+            actuals_df = history_df.loc[history_df['Owned'] == 'Actual']
+            hypos_df = history_df.loc[history_df['Owned'] == 'Hypothetical']
+        # Otherwise we're dealing with only actuals (a currently owned asset), 
+        # so the entire history is actuals
+        else: 
+            actuals_df = history_df 
+            
+        stats_data = []
+        symbols = list(actuals_df['Symbol'].unique())
+        
+        # For each symbol in the history dataframe, process the actuals as both/either
+        # the entirety of the history (in which case we get only the default stats), or
+        # as just the actuals, followed by the hypotheticals (which get their own set of
+        # additional stats)
+        for symbol in symbols: 
+            # Get the actuals for the symbol, and sort by date
+            symbol_actuals_df = actuals_df.loc[actuals_df['Symbol'] == symbol]
+            symbol_actuals_df = symbol_actuals_df.sort_values(by='Date')
+            symbol_actuals_df = symbol_actuals_df.reset_index(drop=True)
+            
+            # Get key milestone prices
+            enter_price = symbol_actuals_df['ClosingPrice'].iloc[0]
+            latest_actuals_price = symbol_actuals_df['ClosingPrice'].iloc[-1]
+            max_actuals_price = symbol_actuals_df['ClosingPrice'].max()
+            
+            # Return from acquisition to last price during ownership
+            # (if currently owned, this is now. If sold in the past, this is exit date)
+            actuals_enter_to_latest = round(
+                (latest_actuals_price - enter_price) / enter_price * 100, 2)
+    
+            # Return from acquisition to max price during ownership 
+            actuals_enter_to_max = round(
+                (max_actuals_price - enter_price) / enter_price * 100, 2)
+
+            # Store in dict, to be later converted to dataframe
+            stats_dict = {
+                'Symbol': symbol,
+                'Actuals Ret.(Enter/Latest)%': actuals_enter_to_latest,
+                'Actuals Ret.(Enter/Max)%': actuals_enter_to_max,
+            }
+            
+            #TODO: Add other stats, like stdDev, sharpe, etc
+
+            # If we're dealing with hypotheticals, add in the hypotheticals stats
+            if hypotheticals: 
+                symbol_hypos_df = hypos_df.loc[hypos_df['Symbol'] == symbol]
+                if symbol_hypos_df.empty:
+                    continue
+                
+                symbol_hypos_df = symbol_hypos_df.sort_values(by='Date')
+                symbol_hypos_df = symbol_hypos_df.reset_index(drop=True)
+                
+                exit_price = symbol_hypos_df['ClosingPrice'].iloc[0]
+                latest_hypo_price = symbol_hypos_df['ClosingPrice'].iloc[-1]
+                max_hypo_price = symbol_hypos_df['ClosingPrice'].max()
+
+                # Return from acquisition to current price (which is end of 
+                # hypothetical history, since it's unowned)
+                hypos_enter_to_current = round(
+                    (latest_hypo_price - enter_price) / enter_price * 100, 2)                
+           
+                # Return from sale to current price
+                hypos_exit_to_current = round(
+                    (latest_hypo_price - exit_price) / exit_price * 100, 2)
+           
+                # Return from acquisition to max price AFTER sale
+                hypos_enter_to_max = round(
+                    (max_hypo_price - enter_price) / enter_price * 100, 2)
+           
+                # Return from sale to max price AFTER sale
+                hypos_exit_to_max = round(
+                    (max_hypo_price - exit_price) / exit_price * 100, 2)
+
+                # Store in dict
+                stats_dict['Hypo Ret.(Enter/Current)%'] = \
+                    hypos_enter_to_current
+                stats_dict['Hypo Ret.(Exit/Current)%'] = \
+                    hypos_exit_to_current
+                stats_dict['Hypo Ret.(Enter/Max)%'] = \
+                    hypos_enter_to_max
+                stats_dict['Hypo Ret.(Exit/Max)%']= \
+                    hypos_exit_to_max
+                
+            stats_data.append(stats_dict)
+        
+        stats_df = pd.DataFrame(stats_data)
+        
+        sort_col = 'Hypo Ret.(Exit/Current)%' \
+            if hypotheticals else 'Actuals Ret.(Enter/Latest)%'
+        stats_df = stats_df.sort_values(by=sort_col, ascending=False)
+        stats_df = add_asset_info(stats_df)
+        
+        return stats_df

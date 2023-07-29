@@ -24,9 +24,6 @@ from libraries.helpers import (build_master_log, gen_hist_quantities_mult,
                                gen_assets_historical_value, get_historical_prices)
 from libraries.vars import SYMBOL_BLACKLIST
 
-from diskcache import Cache
-cache = Cache('cache')
-
 class HistoryHandler:
     # Placeholder for SQL to create history table in DB
     create_history_table_sql = None
@@ -39,10 +36,11 @@ class HistoryHandler:
         self.gen_table()
         
         # Retrieve history from DB
-        history_df = self.get_history()
-        if not history_df.empty:
+        self.history_df = self.get_history()
+        refresh_history = False
+        if not self.history_df.empty:
             # Get latest date from dataframe
-            latest_history_date = history_df['Date'].max()
+            latest_history_date = self.history_df['Date'].max()
             
 
             today = datetime.datetime.today()
@@ -53,11 +51,15 @@ class HistoryHandler:
             # update history from day after latest date to today
             if latest_history_date < previous_business_date:
                 self.set_history(start_date=latest_history_date + BDay(1))
+                refresh_history = True
         # If dataframe is empty, update history from start of time to today
         else:
             self.set_history()
+            refresh_history = True
             
-        self.history_df = self.get_history()
+        if refresh_history:
+            # Retrieve history from DB
+            self.history_df = self.get_history()
         self.latest_history_date = self.get_latest_date()
     
     def gen_table(self) -> None:
@@ -146,7 +148,6 @@ class AssetHistoryHandler(HistoryHandler):
                         insert_ignore_assets_history_sql.format(**insertion_dict)
                 db.execute(insertion_sql)
             
-    # @cache.memoize(expire=60*60*1)   
     def get_history(self) -> pd.DataFrame:
         """
         For all symbols in self.symbols, get asset history from DB into dataframe
@@ -161,7 +162,7 @@ class AssetHistoryHandler(HistoryHandler):
         symbols_str = " WHERE symbol IN " + symbols_clause if len(self.symbols) > 0 else ""
         
         query = read_assets_history_query + symbols_str
-        history_df = mysql_to_df(query, read_assets_history_columns, dbcfg)
+        history_df = mysql_to_df(query, read_assets_history_columns, dbcfg, cached=True)
         return history_df
         
 class PortfolioHistoryHandler(HistoryHandler):
@@ -192,7 +193,7 @@ class PortfolioHistoryHandler(HistoryHandler):
         asset_history_handler = AssetHistoryHandler()
         
         # Get asset history from DB into dataframe
-        asset_history_df = asset_history_handler.get_history()
+        asset_history_df = asset_history_handler.history_df
         
         # Aggregate over dates to get total portfolio value for each day
         daily_portfolio_value_df = asset_history_df.groupby('Date')['Value'].sum()
@@ -230,7 +231,7 @@ class PortfolioHistoryHandler(HistoryHandler):
                     insertion_sql = \
                         insert_ignore_portfolio_history_sql.format(**insertion_dict)
                 db.execute(insertion_sql)
-                
+
     def get_history(self) -> pd.DataFrame:
         """
         Get portfolio history from DB and place into dataframe
@@ -240,7 +241,7 @@ class PortfolioHistoryHandler(HistoryHandler):
                 Date, Value
         """
         history_df = mysql_to_df(read_portfolio_history_query, 
-                                 read_portfolio_history_columns, dbcfg)
+                                 read_portfolio_history_columns, dbcfg, cached=True)
         
         return history_df
 
@@ -390,7 +391,7 @@ class AssetHypotheticalHistoryHandler(HistoryHandler):
             hist_prices_df = pd.concat([hist_prices_df, symbol_prices_df])
         
         master_df = pd.DataFrame()
-        asset_actuals_df = self.asset_history_handler.get_history()
+        asset_actuals_df = self.asset_history_handler.history_df
             
         # Build hypothetical DF, for each symbol 
         for symbol in symbols: 
@@ -445,10 +446,13 @@ class AssetHypotheticalHistoryHandler(HistoryHandler):
                         insert_ignore_assets_hypothetical_history_sql.format(**insertion_dict)
                 db.execute(insertion_sql)
 
-    def get_history(self, with_actuals=False) -> pd.DataFrame:
+    def get_history(self) -> pd.DataFrame:
         """
         For all symbols in self.symbols, get asset hypothetical history from DB into dataframe
         
+        REMOVED "with_actuals" FOR NOW, NO USE FOR IT AND IT FORCES A SEPARATE CALL TO DB
+        HERE WHICH SLOWS THINGS DOWN (instead of using the history_df attribute which is stored
+        in the initialization of this object)
         If with_actuals is True, then also get actuals history from DB into dataframe, and 
         return combined actuals + hypotheticals (with an "Owned" column indicate which is which)
         
@@ -459,17 +463,20 @@ class AssetHypotheticalHistoryHandler(HistoryHandler):
         symbols_clause = \
             "(" + ", ".join([f"'{symbol}'" for symbol in self.symbols]) + ")"
         symbols_str = " WHERE symbol IN " + symbols_clause if len(self.symbols) > 0 else ""
-        
+    
         query = read_assets_hypothetical_history_query + symbols_str
-        history_df = mysql_to_df(query, read_assets_hypothetical_history_columns, dbcfg)
+        history_df = mysql_to_df(query, read_assets_hypothetical_history_columns, dbcfg, 
+                                 cached=True)
         
-        if with_actuals:
-            history_df['Owned'] = "Hypothetical"
-            
-            actuals_df = self.asset_history_handler.get_history()
-            actuals_df['Owned'] = "Actual"
-            
-            history_df = pd.concat([actuals_df, history_df])    
-            history_df = history_df.sort_values(by=['Symbol','Date'], ascending=True)
+        history_df['Owned'] = "Hypothetical"
+        
+        actuals_df = self.asset_history_handler.history_df
+        actuals_df['Owned'] = "Actual"
+        
+        history_df = pd.concat([actuals_df, history_df])    
+        history_df = history_df.sort_values(by=['Symbol','Date'], ascending=True)
 
         return history_df
+
+
+# ahh = AssetHypotheticalHistoryHandler()

@@ -135,6 +135,9 @@ splits_columns = ['Record_Date', 'Distribution_Date', 'Symbol', 'Multiplier']
 acquisitions_query = "SELECT * FROM acquisitions"
 acquisitions_columns = ['Date', 'Symbol', 'Acquirer', 'Conversion_Ratio']
 
+read_entities_table_query = "SELECT * FROM entities"
+read_entities_table_columns = ['Name', 'Symbol', 'Asset Type', 'Sector']
+
 ### Master Log Summary Method ###
 master_log_buys_query = \
     "SELECT date, symbol, action, num_shares FROM trades WHERE action='buy'"

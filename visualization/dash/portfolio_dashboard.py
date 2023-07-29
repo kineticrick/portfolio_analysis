@@ -8,6 +8,7 @@ import numpy as np
 
 import os 
 import sys 
+
 sys.path.append(os.path.join(os.path.dirname(__file__), '../..'))
 from libraries.pandas_helpers import print_full
 from pandas.tseries.offsets import DateOffset
@@ -28,6 +29,7 @@ intervals = portfolio_milestones['Interval'].values.tolist()
 
 # Historical graph data
 port_hist_df = dash_handler.portfolio_history_df
+
 
 # Winners
 num_winners_losers = 5
@@ -60,101 +62,260 @@ port_value_fig.update_layout(
     margin=dict(l=10, r=10, t=10, b=10),
 )
 
-# port_hist_fig = px.line(
-#     port_hist_df,
-#     x=port_hist_df.index,
-#     y=port_hist_df['Value'],
-#     hover_data={'Value': ':$,.2f', 'perc_change': ':.2f%'},
-#     markers=True,
-# )
-
-# port_hist_fig.update_layout()
-
 
 app = Dash(external_stylesheets=[dbc.themes.BOOTSTRAP])
 
-app.layout = dbc.Container([
-    dbc.Row(
-        dbc.Col(
-            html.H1("Portfolio Dashboard"),
-            width={'size': 6, 'offset': 3}
-        ),
-        justify='center'
-    ),
-    html.Hr(),
-    dbc.Row([
-        dbc.Col(        
-            html.Div([
-                "Select period:", 
-                dcc.Dropdown(
-                    id='interval-dropdown',
-                    options=intervals, 
-                    value=default_interval,
-                    clearable=False,
-                ),
-            ],),
-            width={'size': 1, 'offset': 8}
-        ),],
-        justify='start',
-    ),
-    dbc.Row([
-        dbc.Col(
-            dbc.Card(
-                dcc.Graph(
-                    id='portfolio-history-graph',
-                    # figure=port_hist_fig
-                ),
+portfolio_dash_tab = dbc.Container(
+    [
+        dbc.Row(
+            dbc.Col(
+                html.H1("Portfolio Dashboard"),
+                width={'size': 6, 'offset': 3}
             ),
-            width={'size': 9}
+            justify='center'
         ),
-        dbc.Col(
-            dbc.Card(
-                dbc.Stack([
-                    dcc.Graph(
-                        id='portfolio-value-scalar',
-                        # figure=port_value_fig, 
+        html.Hr(),
+        dbc.Row([
+            dbc.Col(        
+                html.Div([
+                    "Select period:", 
+                    dcc.Dropdown(
+                        id='interval-dropdown',
+                        options=intervals, 
+                        value=default_interval,
+                        clearable=False,
                     ),
+                ],),
+                width={'size': 1, 'offset': 8}
+            ),],
+            justify='start',
+        ),
+        dbc.Row([
+            dbc.Col(
+                dbc.Card(
+                    dcc.Graph(
+                        id='portfolio-history-graph',
+                        # figure=port_hist_fig
+                    ),
+                ),
+                width={'size': 9}
+            ),
+            dbc.Col(
+                dbc.Card(
+                    dbc.Stack([
+                        dcc.Graph(
+                            id='portfolio-value-scalar',
+                            # figure=port_value_fig, 
+                        ),
+                        dash_table.DataTable(
+                            id='portfolio-milestones-table',
+                            columns=[{"name": i, "id": i} 
+                                for i in portfolio_milestones.columns],
+                            data=portfolio_milestones.to_dict('records'),
+                        )], 
+                        gap=3
+                    ), 
+                ),
+                width={'size': 3}
+            )],
+            justify='start'   
+        ),
+        dbc.Row([
+            dbc.Col(
+            dbc.Card(
                     dash_table.DataTable(
-                        id='portfolio-milestones-table',
-                        columns=[{"name": i, "id": i} 
-                            for i in portfolio_milestones.columns],
-                        data=portfolio_milestones.to_dict('records'),
-                    )], 
-                    gap=3
-                ), 
-            ),
-            width={'size': 3}
-        )],
-        justify='start'   
-    ),
-    dbc.Row([
-        dbc.Col(
-           dbc.Card(
-                dash_table.DataTable(
-                    id='winners-table',
-                    columns=[{"name": i, "id": i}
-                        for i in winners_df.columns],
-                    data=winners_df.to_dict('records'),
+                        id='winners-table',
+                        columns=[{"name": i, "id": i}
+                            for i in winners_df.columns],
+                        data=winners_df.to_dict('records'),
+                    ),
                 ),
-            ),
-            width={'size': 3, 'offset': 1},  
-        ), 
-        dbc.Col(
-           dbc.Card(
-                dash_table.DataTable(
-                    id='losers-table',
-                    columns=[{"name": i, "id": i}
-                        for i in losers_df.columns],
-                    data=losers_df.to_dict('records'),
+                width={'size': 3, 'offset': 1},  
+            ), 
+            dbc.Col(
+            dbc.Card(
+                    dash_table.DataTable(
+                        id='losers-table',
+                        columns=[{"name": i, "id": i}
+                            for i in losers_df.columns],
+                        data=losers_df.to_dict('records'),
+                    ),
                 ),
-            ),
-            width={'size': 3, 'offset': 1},  
-        ),],
-        justify='start'
-    ),], 
+                width={'size': 3, 'offset': 1},  
+            ),],
+            justify='start'
+        ),
+    ], 
     fluid=True
 )
 
+
+asset_hypo_df = dash_handler.assets_hypothetical_history_df
+
+asset_hypo_fig = px.line(
+    asset_hypo_df,
+    x=asset_hypo_df['Date'], 
+    y=asset_hypo_df['ClosingPrice'],
+    color=asset_hypo_df['Symbol'],
+    line_dash=asset_hypo_df['Owned'],
+)
+asset_hypo_fig.update_layout(height=800)
+
+normalized_hypo_df = dash_handler.exits_hypotheticals_history_df
+normalized_hypo_df = dash_handler.expand_history_df(normalized_hypo_df)
+
+normalized_hypo_fig = px.line(
+    normalized_hypo_df,
+    x=normalized_hypo_df['Date'], 
+    y=normalized_hypo_df['ClosingPrice % Change'],
+    color=normalized_hypo_df['Symbol'],
+    line_dash=normalized_hypo_df['Sector'],
+)
+normalized_hypo_fig.update_layout(height=800)
+
+sectors = normalized_hypo_df['Sector'].unique().tolist()
+sectors = [{'label': x, 'value': x} for x in sectors]
+sectors = sorted(sectors, key=lambda x: x['label'])
+
+
+asset_hypo_stats_df = dash_handler.gen_historical_stats(asset_hypo_df, hypotheticals=True)
+asset_hypo_stats_df = asset_hypo_stats_df[['Name', 'Symbol', 'Sector', 'Hypo Ret.(Exit/Current)%']]
+
+
+hypotheticals_dash_tab = dbc.Container(
+    [
+        dbc.Row(
+            dbc.Col(
+                dbc.Card(
+                    dcc.Graph(
+                        id='hypothetical-history-graph',
+                        figure=asset_hypo_fig
+                    ),
+                ),
+                width={'size': 12}
+            ),
+            justify='start'
+        ),
+        dbc.Row([
+            dbc.Col(
+                dcc.Dropdown(
+                    options=sectors,
+                    id='sector-select-dropdown',
+                    placeholder='Select sector(s)',
+                    multi=True,
+                ),
+                width={'offset': 1, 'size': 3}
+            ),
+            dbc.Col(
+                dcc.Dropdown(
+                    id='asset-select-dropdown',
+                    placeholder='Select asset(s)',
+                    multi=True,
+                ),
+                width={'offset': 1, 'size': 3}
+            ),],
+            justify='start' 
+        ),
+        
+        dbc.Row([
+            dbc.Col(
+                dbc.Card(
+                    dcc.Graph(
+                        id='hypothetical-normalized-history-graph',
+                        figure=normalized_hypo_fig
+                    ),
+                ),
+                width={'size': 9}
+            ),
+            dbc.Col(
+                dbc.Card(
+                    dash_table.DataTable(
+                        id='hypos-global-table',
+                        columns=[{"name": i, "id": i}
+                            for i in asset_hypo_stats_df.columns],
+                        data=asset_hypo_stats_df.to_dict('records'),
+                        style_header={
+                            'whiteSpace': 'normal',
+                            'height': 'auto',
+                        }, 
+                        style_cell={
+                            'textAlign': 'center',
+                            'fontSize': '13px',
+                        }
+                    ),
+                ),
+                width={'size': 3}
+            ),],
+            justify='start'
+        ),
+    ],
+    fluid=True
+)
+    
+
+app.layout = \
+    dbc.Tabs(
+        [
+            dbc.Tab(label='Portfolio Dashboard', tab_id='portfolio-dash-tab', children=portfolio_dash_tab),
+            dbc.Tab(label='Hypotheticals Dashboard', tab_id='hypotheticals-dash-tab', children=hypotheticals_dash_tab),
+        ], 
+        id='tabs', active_tab='portfolio-dash-tab'
+    )
+
+@callback(
+    Output('asset-select-dropdown', 'options'),
+    Input('sector-select-dropdown', 'value'))
+def update_asset_dropdown_options(sectors):    
+    if not sectors:
+        df = normalized_hypo_df  
+    else:
+        df = normalized_hypo_df[normalized_hypo_df['Sector'].isin(sectors)]
+
+    df = df[['Symbol', 'Name', ]].drop_duplicates()
+    
+    assets = []
+    for _, row in df.iterrows():
+        asset_dict = {
+            'value': row['Symbol'],
+            'label': f"{row['Symbol']} | {row['Name']}",
+        }
+        assets.append(asset_dict)
+        
+    assets = sorted(assets, key=lambda x: x['label'])
+    
+    return assets
+    
+@callback(
+    Output('asset-select-dropdown', 'value'),
+    Input('sector-select-dropdown', 'value'),
+    Input('asset-select-dropdown', 'options'))
+def set_asset_dropdown_values(sectors, available_options):
+    if not sectors: 
+        return None
+    else: 
+        return [x['value'] for x in available_options]
+
+@callback(
+    Output('hypothetical-normalized-history-graph', 'figure'),
+    Input('sector-select-dropdown', 'value'),
+    Input('asset-select-dropdown', 'value'))
+def update_normalized_hypo_graph(sectors, assets):
+    if not sectors and not assets:
+        df = normalized_hypo_df
+    else:
+        df = normalized_hypo_df[normalized_hypo_df['Symbol'].isin(assets)]
+
+    normalized_hypo_fig = px.line(
+        df,
+        x=df['Date'], 
+        y=df['ClosingPrice % Change'],
+        color=df['Symbol'],
+        line_dash=df['Sector'],
+    )
+        
+    normalized_hypo_fig.update_layout(transition_duration=500, height=800)
+    return normalized_hypo_fig
+        
 @callback(
     Output('portfolio-history-graph', 'figure'),
     Input('interval-dropdown', 'value'))
@@ -219,15 +380,6 @@ def update_asset_tables(interval):
     Output('portfolio-value-scalar', 'figure'),
     Input('interval-dropdown', 'value'))
 def update_portfolio_value(interval):
-    # if interval == "Lifetime":
-    #     date = port_hist_df.index[-1]
-    # else: 
-    #     days = interval_days[interval]
-    #     offset = DateOffset(days=days)
-    #     date =  pd.to_datetime('today') - offset
-    #     date = date.strftime('%Y-%m-%d')
-        
-    # port_hist_df = dash_handler.portfolio_history_df
     milestone_value = portfolio_milestones.loc[
         portfolio_milestones['Interval'] == interval]['Value'].values[0]
     
@@ -251,7 +403,6 @@ def update_portfolio_value(interval):
     )
     
     return port_value_fig
-    
 
 if __name__ == '__main__':
     app.run_server(debug=True)
