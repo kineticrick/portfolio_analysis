@@ -56,7 +56,7 @@ def print_full(df):
     pd.reset_option('display.max_columns')
     pd.reset_option('display.width')
 
-@cache.memoize(expire=60*60*1)
+@cache.memoize(expire=60*5)
 def mysql_query(query, dbcfg):
     with MysqlDB(dbcfg) as db:
         return db.query(query)
@@ -69,6 +69,9 @@ def mysql_to_df(query, columns, dbcfg, cached=False, verbose=False):
         print(f"Query: {query}")
         print(f"Columns: {', '.join(columns)}")
 
+    # Use this to bypass the cache when debugging, etc 
+    cached = False
+    
     if cached:
         mysql_func = mysql_query
     else: 
@@ -77,5 +80,8 @@ def mysql_to_df(query, columns, dbcfg, cached=False, verbose=False):
     mysql_res = mysql_func(query, dbcfg)    
     df_data = [list(tup) for tup in mysql_res]
     df = pd.DataFrame(df_data, columns=columns)
+    
+    # Cast all numerical columns to float
+    df = df.apply(pd.to_numeric, errors='ignore')
     
     return df

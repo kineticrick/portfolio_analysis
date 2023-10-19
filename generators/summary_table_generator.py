@@ -42,6 +42,7 @@ def process_master_log(master_log_df: pd.DataFrame) -> pd.DataFrame:
         dividend = event['Dividend']
         multiplier = event['Multiplier']
         acquirer = event['Acquirer']
+        target = event['Target']
         
         match action:
             case 'buy': 
@@ -60,13 +61,13 @@ def process_master_log(master_log_df: pd.DataFrame) -> pd.DataFrame:
             
             case 'dividend':
                 # Increase dividend total for asset
-                total_dividend[symbol] += dividend
+                total_dividend[symbol] += Decimal(dividend)
                 
             case 'split':
                 # Multiply share count by split multiplier
                 share_count[symbol] *= multiplier
 
-            case 'acquisition':
+            case 'acquisition-target':
                 # Determine converted amount of shares for target, add to acquirer's amount
                 multiplied_shares = int(share_count[symbol] * multiplier)
                 share_count[acquirer] += multiplied_shares

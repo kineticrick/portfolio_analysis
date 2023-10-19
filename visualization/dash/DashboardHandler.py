@@ -36,14 +36,34 @@ class DashboardHandler:
             # Lifetime will also be added when milestones are generated
         ]
 
+        ######## ASSETS ########
+        ah = AssetHistoryHandler()
+
         # Get and Set current portfolio value
+        # NOTE: Doing this here because it's needed for assets summary, 
+        # though it should be in the "PORTFOLIO" section
         portfolio_summary_df, portfolio_value = get_portfolio_current_value()
         self.current_portfolio_summary_df = portfolio_summary_df
         self.current_portfolio_value = portfolio_value
-    
+        
+        # Get and set assets history
+        self.assets_history_df = ah.history_df
+        portfolio_symbols = self.current_portfolio_summary_df['Symbol'].tolist()
+        self.portfolio_assets_history_df = self.assets_history_df.loc[
+            self.assets_history_df['Symbol'].isin(portfolio_symbols)]
+
+        # Get and set asset milestones
+        self.asset_milestones = self.get_asset_milestones()
+        
+        # Get and set asset summary
+        self.assets_summary_df = self._gen_assets_summary()
+        
+        ####### PORTFOLIO ########
+        ph = PortfolioHistoryHandler(assets_history_df = self.assets_history_df)
+        
         # Get and Set portfolio history
-        ph = PortfolioHistoryHandler()
         self.portfolio_history_df = ph.history_df
+
 
         # Index by date - can be done here since portfolio history 
         # has a single set of unique dates (no duplicates)
@@ -54,34 +74,22 @@ class DashboardHandler:
         # Add current value to portfolio history
         self.portfolio_history_df.loc[pd.to_datetime('today')] = \
             self.current_portfolio_value
-        
-
-        # Get and set assets history
-        ah = AssetHistoryHandler()
-
-        self.assets_history_df = ah.history_df
-
 
         # Get and set portfolio milestones
         self.portfolio_milestones = self.get_portfolio_milestones()
         
-        # Get and set asset milestones
-        self.asset_milestones = self.get_asset_milestones()
-        
+        ####### HYPOTHETICALS #######
 
         # Get and set assets hypothetical history for all exited assets
-        ahh = AssetHypotheticalHistoryHandler()
-
+        ahh = AssetHypotheticalHistoryHandler(
+            assets_history_df=self.assets_history_df)
         self.assets_hypothetical_history_df = ahh.history_df
 
-        
         # Split into actuals and hypotheticals, to make it possibly easier when needed
         self.exits_actuals_history_df = self.assets_hypothetical_history_df.loc[
             (self.assets_hypothetical_history_df['Owned'] == 'Actual')]
         self.exits_hypotheticals_history_df = self.assets_hypothetical_history_df.loc[
             (self.assets_hypothetical_history_df['Owned'] == 'Hypothetical')]
-        
-
         
     def _gen_performance_milestones(self, history_df: pd.DataFrame, current_value: float,
                                     current_price: float=None,  
@@ -115,6 +123,7 @@ class DashboardHandler:
                 milestone_value = history_df.loc[milestone_date]['Value']
             except KeyError:
                 continue
+            
             symbol = history_df.loc[milestone_date]['Symbol'] \
                 if 'Symbol' in history_df else "PORTFOLIO"
             
@@ -415,3 +424,52 @@ class DashboardHandler:
         stats_df = add_asset_info(stats_df)
         
         return stats_df
+    
+
+    def _gen_assets_summary(self) -> pd.DataFrame:
+        """ 
+        Builds a master summary of all assets in the portfolio, including all attributes
+        listed in summary_cols and return_cols below
+        """
+        summary_cols = ['Symbol', 'Name', 'Sector','Asset Type', 'Quantity',
+                        'First Purchase Date', 'Last Purchase Date', 'Cost Basis',
+                        'Current Price', 'Current Value', '% Total Portfolio' , 
+                        'Lifetime Return', 'Dividend Yield', 'Total Dividend', ]        
+        returns_cols = ['1d', '1w', '1m', '3m', '6m', '1y', '2y', '3y', '5y']
+        
+        # Pivot the milestone returns for all assets into a dtaaframe with a 
+        # single row per unique asset, with columns for each interval
+        returns_df = self.asset_milestones 
+        returns_df = returns_df.pivot(
+            index='Symbol', columns='Interval', values='Price % Return')
+        returns_df = returns_df[returns_cols]
+        
+        summary_df = self.current_portfolio_summary_df[summary_cols]
+        
+        assets_summary_df = pd.merge(summary_df, returns_df, on='Symbol')
+        
+        return assets_summary_df
+
+# dh = DashboardHandler()
+# assets_history_df = dh.expand_history_df(dh.portfolio_assets_history_df)
+# print_full(assets_history_df)
+
+# assets_history_stats_df = dh.gen_historical_stats(assets_history_df)
+# print_full(assets_history_stats_df)
+
+# print_full(dh.assets_summary_df)
+
+# milestones = dh.get_asset_milestones()
+# pivot = milestones.pivot(index='Symbol', columns='Interval', values='Price % Return')
+
+# dh.current_portfolio_summary_df = dh.current_portfolio_summary_df[summary_cols]
+# print_full(dh.current_portfolio_summary_df)
+
+
+# return_cols = ['1d', '1w', '1m', '3m', '6m', '1y', '2y', '3y', '5y']
+# pivot = pivot[return_cols]
+# print_full(pivot)
+
+# merged_df = pd.merge(dh.current_portfolio_summary_df, pivot, on='Symbol')
+# print_full(merged_df)
+# print_full(milestones)
