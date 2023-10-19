@@ -48,7 +48,22 @@ def get_transactions_from_csv(csvfiles, brokerage):
                 transact_dict = {}
                 row = {k.lower(): v for k, v in row.items()}
                 transact_dict['symbol'] = row.get('symbol')
-                if brokerage == 'td_ameritrade' or brokerage == 'schwab': 
+                if brokerage == 'schwab':
+                    try: 
+                        transact_dict['date'] = datetime.strptime(row.get('date'), "%m/%d/%Y").strftime("%Y-%m-%d")
+                    except: 
+                        pass
+                    if "reinvest" in row['action'].lower():
+                        continue
+                    if "div" in row['action'].lower():
+                        transact_dict['action'] = "dividend"
+                        transact_dict['dividend'] = row['amount'].strip('$')
+                    else:
+                        transact_dict['action'] = row['action'].lower()
+                        transact_dict['num_shares'] = row['quantity']
+                        transact_dict['price_per_share'] = row['price'].strip('$')
+                        transact_dict['total_price'] = row['amount'].strip('-').strip('$')
+                elif brokerage == 'td_ameritrade': 
                     transact_dict['date'] = datetime.strptime(row.get('date'), "%m/%d/%Y").strftime("%Y-%m-%d")
                     description = row['description'].lower()
                     if "dividend" in description:

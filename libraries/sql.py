@@ -164,9 +164,9 @@ asset_name_query = "SELECT symbol,name FROM entities"
 asset_name_columns = ['Symbol', 'Name']
 
 read_summary_table_query = "SELECT * FROM summary"
-read_summary_table_columns = ['Symbol', 'Name', 'Quantity', 'CostBasis',
-                              'FirstPurchaseDate', 'LastPurchaseDate', 
-                              'TotalDividend', 'DividendYield']
+read_summary_table_columns = ['Symbol', 'Name', 'Quantity', 'Cost Basis',
+                              'First Purchase Date', 'Last Purchase Date', 
+                              'Total Dividend', 'Dividend Yield']
                               
                               
 # HistoryHelper - assets_history table

@@ -252,14 +252,73 @@ hypotheticals_dash_tab = dbc.Container(
     fluid=True
 )
     
+assets_global_table_df = dash_handler.assets_summary_df
+
+assets_history_df = dash_handler.expand_history_df(
+    dash_handler.portfolio_assets_history_df)
+
+assets_history_fig = px.line(
+    assets_history_df,
+    x=assets_history_df['Date'], 
+    y=assets_history_df['ClosingPrice % Change'],
+    color=assets_history_df['Symbol'],
+    line_dash=assets_history_df['Sector'],
+)
+assets_history_fig.update_layout(height=800)
+
+
+assets_dash_tab = dbc.Container(
+    [        
+        dbc.Row([
+            dbc.Col(
+                dbc.Card(
+                    dash_table.DataTable(
+                        id='assets-global-table',
+                        columns=[{"name": i, "id": i}
+                            for i in assets_global_table_df.columns],
+                        data=assets_global_table_df.to_dict('records'),
+                        style_header={
+                            'whiteSpace': 'normal',
+                            'height': 'auto',
+                        }, 
+                        style_cell={
+                            'textAlign': 'center',
+                            'fontSize': '13px',
+                        },
+                        fixed_rows={'headers': True},
+                        sort_action='native',
+                        sort_mode='multi',
+                        row_selectable='multi',
+                    ),
+                ),
+                width={'size': 12}
+            ),],
+            justify='start'
+        ),
+        dbc.Row(
+            dbc.Col(
+                dbc.Card(
+                    dcc.Graph(
+                        id='assets-history-graph',
+                        figure=assets_history_fig
+                    ),
+                ),
+                width={'size': 12}
+            ),
+            justify='start'
+        ),
+    ],
+    fluid=True
+)
 
 app.layout = \
     dbc.Tabs(
         [
             dbc.Tab(label='Portfolio Dashboard', tab_id='portfolio-dash-tab', children=portfolio_dash_tab),
+            dbc.Tab(label='Assets Dashboard', tab_id='assets-dash-tab', children=assets_dash_tab),
             dbc.Tab(label='Hypotheticals Dashboard', tab_id='hypotheticals-dash-tab', children=hypotheticals_dash_tab),
         ], 
-        id='tabs', active_tab='portfolio-dash-tab'
+        id='tabs', active_tab='assets-dash-tab'
     )
 
 @callback(

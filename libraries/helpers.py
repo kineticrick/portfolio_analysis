@@ -8,6 +8,7 @@ import decimal
 import math
 import numpy as np
 import pandas as pd
+import datetime
 
 from collections import defaultdict
 from libraries.dbcfg import *
@@ -17,7 +18,7 @@ from libraries.yfinancelib import get_historical_prices, get_current_price
 from libraries.vars import (NON_QUANTITY_ASSET_EVENTS, ASSET_EVENTS, 
                             MASTER_LOG_COLUMNS, CADENCE_MAP, 
                             BUSINESS_CADENCE_MAP)
-from pandas.tseries.offsets import BDay
+from pandas.tseries.offsets import Day,BDay
 
 from diskcache import Cache
 cache = Cache('cache')
@@ -167,7 +168,8 @@ def gen_hist_quantities(asset_event_log_df: pd.DataFrame,
                 target_prior_quantity_df = \
                     get_asset_quantity_by_date(target, day_before.strftime('%Y-%m-%d'))
 
-                target_prior_quantity = decimal.Decimal(target_prior_quantity_df['Quantity'])
+                # target_prior_quantity = decimal.Decimal(target_prior_quantity_df['Quantity'])
+                target_prior_quantity = target_prior_quantity_df['Quantity']
 
                 # Add the quantity of the target asset * multiplier to the acquirer's total
                 target_prior_quantity *= multiplier
@@ -262,6 +264,13 @@ def get_asset_quantity_by_date(symbols: list, date: str) -> pd.DataFrame:
     
     return hist_quantities_df.loc[date]
 
+def is_bday(date: str) -> bool:
+    """
+    Check if a date is a business day
+    """
+    bday = BDay()
+    return bday.is_on_offset(pd.to_datetime(date))
+    
 def gen_assets_historical_value(symbols: list=[], 
                                 cadence: str='quarterly',
                                 start_date: str=None,
@@ -295,6 +304,20 @@ def gen_assets_historical_value(symbols: list=[],
 
     if start_date is not None:
         start_date = pd.to_datetime(start_date)
+        
+        # If start_date is not a business/trading day, then create a temporary
+        # start date which is the previous business day before the start date
+        # This allows us to fill in the non-business days gap with the previous
+        # trading days information 
+        # (IE, if start date is a Sunday, then we will set Friday as temp start day
+        # and fill in the weekend with Friday's data)
+        orig_start_date = start_date
+        
+        # FYI, Possible that both start_date and orig_start_date
+        # are the same. But after this, we now know that start_date 
+        # will always be a business day
+        start_date = BDay().rollback(orig_start_date)
+        
         quantities_df = \
             quantities_df[quantities_df.index >= start_date]
 
@@ -317,6 +340,8 @@ def gen_assets_historical_value(symbols: list=[],
                                 start=first_date, end=last_date,
                                 interval=cadence, cleaned_up=True)
     
+    # print(prices_df)
+    
     # Standardize quantities and prices dataframes
     quantities_df = quantities_df.reset_index()
     # prices_df = prices_df.reset_index()
@@ -327,9 +352,8 @@ def gen_assets_historical_value(symbols: list=[],
     # prices_df = prices_df[['Date', 'Symbol', 'ClosingPrice']]
 
     # Merge quantities and prices
-    merged_df = \
-        quantities_df.merge(prices_df, 
-                            on=['Date','Symbol'], how='inner')    
+    merged_df = quantities_df.merge(
+        prices_df, on=['Date','Symbol'], how='inner')    
         
     # Calculate value of asset at each date
     merged_df['Value'] = merged_df['Quantity'] * merged_df['ClosingPrice']
@@ -339,6 +363,16 @@ def gen_assets_historical_value(symbols: list=[],
     
     # Fill in missing values with previous value, to cover weekends + holidays
     merged_df = merged_df.fillna(method='ffill')
+    
+    # Remove, if any, rows which precede the original start date 
+    if start_date is not None:
+        merged_df = merged_df[merged_df['Date'] >= orig_start_date]
+        
+    # Do not return any data for "today", as the day has not closed and 
+    # this is not "historical" data yet. Use "get_current_prices" for current prices
+    # So, delete rows with todays date
+    today = datetime.datetime.today().strftime('%Y-%m-%d')
+    merged_df = merged_df[merged_df['Date'] != today]
     
     # Remove all rows with quantity=0 (ie days on which the asset was sold and went to 0)
     # Should only be 1 row per exited asset 
@@ -357,20 +391,22 @@ def get_portfolio_summary() -> pd.DataFrame:
                               Total Dividend, Dividend Yield 
     """
     
-    portfolio_summary_df = \
-        mysql_to_df(read_summary_table_query, read_summary_table_columns, dbcfg, 
-                    cached=True)
+    portfolio_summary_df = mysql_to_df(read_summary_table_query, 
+                                       read_summary_table_columns, dbcfg, 
+                                       cached=True)
     
     return portfolio_summary_df
     
 # Cache for 1 hour, since it takes a bit of time to get current prices for 
 # all assets in portfolio
-@cache.memoize(expire=60*60*1)    
+# @cache.memoize(expire=60*60*1)    
 def get_portfolio_current_value() -> tuple[pd.DataFrame, float]:
     """ 
     Retrieve total value of entire portfolio at current time
     Returns:
-        summary_df: (See get_portfolio_summary()) + Current Price, Current Value
+        summary_df: (See get_portfolio_summary()) +
+            Current Price, Current Value, [Asset Info], 
+            % of total value, Lifetime Return (Current Value / Cost Basis)
         total_value: Total value of portfolio, as float
     """
     
@@ -380,9 +416,24 @@ def get_portfolio_current_value() -> tuple[pd.DataFrame, float]:
     current_prices = get_current_price(symbols)
 
     summary_df = summary_df.merge(current_prices, on='Symbol', how='left')
-    summary_df['Current Value'] = summary_df['Quantity'] * summary_df['Current Price']
+    summary_df['Current Value'] = \
+        round(summary_df['Quantity'] * summary_df['Current Price'], 2)
 
+    # Generate total value of portfolio
     total_value = round(summary_df['Current Value'].sum(), 2)
+    
+    # Add each asset's % of total value
+    summary_df['% Total Portfolio'] = \
+        round(summary_df['Current Value'] / total_value * 100, 2)
+        
+    # Add asset info
+    summary_df = summary_df.drop(columns=['Name'], axis=1)
+    summary_df = add_asset_info(summary_df, truncate=True)
+    
+    # Add lifetime return
+    summary_df['Lifetime Return'] = \
+        round((summary_df['Current Value'] - summary_df['Cost Basis']) / 
+              summary_df['Cost Basis'] * 100, 2)
     
     return (summary_df, total_value)
 
@@ -404,8 +455,9 @@ def add_asset_info(asset_df: pd.DataFrame, truncate=True) -> pd.DataFrame:
         read_entities_table_query, read_entities_table_columns, 
         dbcfg, cached=True)
         
-    for col in asset_info_df.select_dtypes(include='object'):
-        asset_info_df[col] = asset_info_df[col].str.slice(0, 20)
+    if truncate:
+        for col in asset_info_df.select_dtypes(include='object'):
+            asset_info_df[col] = asset_info_df[col].str.slice(0, 20)
         
     asset_df = asset_df.merge(asset_info_df, on='Symbol', how='left')
     
@@ -414,3 +466,12 @@ def add_asset_info(asset_df: pd.DataFrame, truncate=True) -> pd.DataFrame:
 # TODO: BUILDIN ERROR HANDLING
 # Symbols that don't exist
 # Symbols that don't have any data
+
+# summary_df = get_portfolio_current_value()[0]
+# print_full(summary_df) 
+
+# out = gen_assets_historical_value(symbols=['MSFT', 'META'],
+#                                   cadence='daily',
+#                                   start_date='2023-08-01')
+
+# print_full(out)

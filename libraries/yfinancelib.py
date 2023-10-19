@@ -9,10 +9,14 @@ import pandas as pd
 import yfinance as yf
 
 from collections import defaultdict
-from datetime import date
+from datetime import date, datetime
 from dateutil.relativedelta import relativedelta
 from libraries.pandas_helpers import * 
 from libraries.vars import BUSINESS_CADENCE_MAP, CADENCE_MAP, SYMBOL_BLACKLIST
+from pandas.tseries.offsets import Day
+
+from diskcache import Cache
+cache = Cache('cache')
 
 # Given a type of unit and count, return the start date in the past
 # For instance, "week, 2" would give the date 2 weeks ago
@@ -58,10 +62,33 @@ def get_tickers_from_yfinance(tickers: list) -> dict:
     elif len(tickers) > 1:
         ticker_objs = yf.Tickers(ticker_str)
         for sym,obj in ticker_objs.tickers.items():
-            symbol = obj.info['symbol']
+            try: 
+                symbol = obj.info['symbol']
+            except: 
+                symbol = obj.info['symbol']
             ticker_info[symbol] = obj
     
     return ticker_info
+
+@cache.memoize(expire=60*60*12) 
+def _gen_historical_prices(tickers, start, end): 
+    """ 
+    Helper function to retrieve historical prices for a list of ticker objects
+    
+    Separated out from get_historical_prices to allow for caching/memoization
+    """
+    ticker_objs = get_tickers_from_yfinance(tickers)
+    
+    prices = {}
+    for symbol, ticker_obj in ticker_objs.items():
+        
+        history_df = ticker_obj.history(start=start, end=end, 
+                                          actions=False, timeout=60)
+        
+        history_dict = history_df.to_dict(orient='index')
+        prices[symbol] = history_dict
+
+    return prices
 
 def get_historical_prices(tickers: list, start: str=None, 
                    end: str=None, interval: str=None, 
@@ -76,23 +103,21 @@ def get_historical_prices(tickers: list, start: str=None,
     #   prices_df: Date, Open, High, Low, Close, Volume, Symbol 
     #   priced_df(cleaned up): Date, Symbol, ClosingPrice
     """    
-    prices = {}
-    
-    # Retrieve ticker data from yfinance
-    ticker_objs = get_tickers_from_yfinance(tickers)
-    
-    # Get historical price data for each ticker
-    for symbol, ticker_obj in ticker_objs.items():
-        prices[symbol] = ticker_obj.history(start=start, end=end, 
-                                            actions=False, timeout=60)
-    
     prices_df = pd.DataFrame()
+
+    # Get historical price data for each ticker
+    prices = _gen_historical_prices(tickers, start, end)
     
     # Add date index and symbol column to each dataframe
     for symbol, data in prices.items(): 
+        # Need to convert data back to a dataframe
+        data = pd.DataFrame.from_dict(data, orient='index')
+        data.index.name = 'Date'
+        
         data['Symbol'] = symbol
         data = data.reset_index()
         data['Date'] = pd.to_datetime(data['Date']).dt.date
+        
                 
         if cleaned_up:
             # Keep only closing price column 
@@ -103,8 +128,14 @@ def get_historical_prices(tickers: list, start: str=None,
             first_date = data['Date'].min()
             # Use 'end' as the final date, to account for weirdness where the final date of 
             # holding is on a monday, and the last trading day is the friday before
-            # This prevents bgi gaps in the merged df when it joins 
+            # This prevents big gaps in the merged df when it joins 
             last_date = end if end is not None else date.today()
+            
+            # Don't include data on today for "historical" data. Set the final day as yesterday
+            today = datetime.today()
+            if last_date == today.date():
+                last_date = last_date - Day(1)
+            
             date_range = pd.date_range(start=first_date, end=last_date, freq='D')
             data = data.set_index('Date').reindex(date_range)
             
@@ -128,12 +159,16 @@ def get_historical_prices(tickers: list, start: str=None,
     
     return prices_df
 
-def get_current_price(tickers: list) -> pd.DataFrame:
+@cache.memoize(expire=60*60*1) 
+def _gen_current_prices(tickers: list) -> list:
     """ 
     Given list of tickers, return current/realtime price data
     
-    Returns:
-        current_prices_df: Symbol, Current Price
+    Separated this out from get_current_prices to allow it to be cached/memoized
+    (output must be JSON serializable/pickle-able)
+    
+    Returns: current_prices (list of dicts)
+        
     """
     current_prices = []
     
@@ -148,7 +183,16 @@ def get_current_price(tickers: list) -> pd.DataFrame:
             'Current Price': current_price
         })
         
+    return current_prices
+
+def get_current_price(tickers: list) -> pd.DataFrame:
+    """ 
+    Given list of tickers, return current/realtime price data
     
+    Returns:
+        current_prices_df: Symbol, Current Price
+    """
+    current_prices = _gen_current_prices(tickers)
                         
     return pd.DataFrame(current_prices)
     
@@ -175,3 +219,11 @@ def get_summary_returns(tickers, unit="months", length=3,
                 round(raw_pct_change, 2)
         
     return raw_price_data
+
+# tickers = ['MSFT']
+# start = '2023-07-01'
+# ticker_objs = get_tickers_from_yfinance(tickers)
+# # out = _gen_historical_prices(ticker_objs, start, None)
+
+# o = get_historical_prices(tickers, start=start, cleaned_up=True, interval='daily')
+# print_full(o)
