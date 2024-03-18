@@ -219,11 +219,3 @@ def get_summary_returns(tickers, unit="months", length=3,
                 round(raw_pct_change, 2)
         
     return raw_price_data
-
-# tickers = ['MSFT']
-# start = '2023-07-01'
-# ticker_objs = get_tickers_from_yfinance(tickers)
-# # out = _gen_historical_prices(ticker_objs, start, None)
-
-# o = get_historical_prices(tickers, start=start, cleaned_up=True, interval='daily')
-# print_full(o)
