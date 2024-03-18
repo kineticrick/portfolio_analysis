@@ -221,7 +221,7 @@ class DashboardHandler:
         
         return milestones_df
     
-    #TODO: Implement this for all assets over history - and add N (ie top 5, 10)
+    #TODO: Implement this for all assets over entire history - and add N (ie top 5, 10)
     def get_ranked_assets(self,  interval: str, price_or_value: str='price',
                           ascending: bool=False, count: int=None) -> pd.DataFrame:
         """

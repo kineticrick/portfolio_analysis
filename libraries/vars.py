@@ -30,5 +30,6 @@ SYMBOL_BLACKLIST = [
     'BF.B',
     'CONE',
     'DIDI',
-    'QTS'
+    'QTS',
+    'ATVI',
 ]
