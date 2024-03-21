@@ -1,13 +1,13 @@
 import os 
 import sys 
-sys.path.append(os.path.join(os.path.dirname(__file__), '../..'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '../../..'))
 
 import dash_bootstrap_components as dbc
 from dash import Dash
 
-from portfolio_tab import portfolio_tab
-from assets_tab import assets_tab
-from hypotheticals_tab import hypotheticals_tab
+from visualization.dash.portfolio_dashboard.tabs import (portfolio_tab, 
+                                                         assets_tab,
+                                                         hypotheticals_tab)
 
 app = Dash(external_stylesheets=[dbc.themes.BOOTSTRAP])
 

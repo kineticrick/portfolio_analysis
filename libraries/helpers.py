@@ -4,23 +4,34 @@ import sys
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-import decimal
 import math
-import numpy as np
 import pandas as pd
 import datetime
 
 from collections import defaultdict
-from libraries.dbcfg import *
-from libraries.pandas_helpers import print_full, mysql_to_df
-from libraries.sql import *
-from libraries.yfinancelib import get_historical_prices, get_current_price
+from libraries.db import dbcfg
+from libraries.pandas import print_full, mysql_to_df
+from libraries.db.sql import (master_log_buys_query,
+                              master_log_buys_columns,
+                              master_log_sells_query,
+                              master_log_sells_columns,
+                              master_log_dividends_query,
+                              master_log_dividends_columns,
+                              master_log_splits_query,
+                              master_log_splits_columns,
+                              master_log_acquisitions_query,
+                              master_log_acquisitions_columns,
+                              read_entities_table_query,
+                              read_entities_table_columns,
+                              read_summary_table_query, 
+                              read_summary_table_columns)
+from libraries.yfinance import get_historical_prices, get_current_price
 from libraries.vars import (NON_QUANTITY_ASSET_EVENTS, ASSET_EVENTS, 
-                            MASTER_LOG_COLUMNS, CADENCE_MAP, 
-                            BUSINESS_CADENCE_MAP)
-from pandas.tseries.offsets import Day,BDay
+                            MASTER_LOG_COLUMNS, CADENCE_MAP)
+from pandas.tseries.offsets import BDay
 
 from diskcache import Cache
+
 cache = Cache('cache')
 
 def build_master_log(symbols: list=[]) -> pd.DataFrame:
@@ -168,7 +179,6 @@ def gen_hist_quantities(asset_event_log_df: pd.DataFrame,
                 target_prior_quantity_df = \
                     get_asset_quantity_by_date(target, day_before.strftime('%Y-%m-%d'))
 
-                # target_prior_quantity = decimal.Decimal(target_prior_quantity_df['Quantity'])
                 target_prior_quantity = target_prior_quantity_df['Quantity']
 
                 # Add the quantity of the target asset * multiplier to the acquirer's total
@@ -272,7 +282,7 @@ def is_bday(date: str) -> bool:
     return bday.is_on_offset(pd.to_datetime(date))
     
 def gen_assets_historical_value(symbols: list=[], 
-                                cadence: str='quarterly',
+                                cadence: str='daily',
                                 start_date: str=None,
                                 include_exit_date=True) -> pd.DataFrame:
     """ 
@@ -280,7 +290,7 @@ def gen_assets_historical_value(symbols: list=[],
     Takes quantity of shares, and asset price at that time, to calculate
     Defaults to daily cadence, unless specified 
     
-    Can be used to generate historical daily value of every asset every owned 
+    Can be used to generate historical daily value of every asset ever owned 
     (and, by extension, full portfolio)
     
     If "include_exit_date" is True, then the last date of the asset's possession, when 
@@ -339,17 +349,10 @@ def gen_assets_historical_value(symbols: list=[],
     prices_df = get_historical_prices(tickers=returned_symbols, 
                                 start=first_date, end=last_date,
                                 interval=cadence, cleaned_up=True)
-    
-    # print(prices_df)
-    
+
     # Standardize quantities and prices dataframes
     quantities_df = quantities_df.reset_index()
-    # prices_df = prices_df.reset_index()
     quantities_df = quantities_df.rename(columns={'index': 'Date'})
-    # prices_df = prices_df.rename(columns={'index': 'Date'})
-    
-    # Only keep needed columns from price data
-    # prices_df = prices_df[['Date', 'Symbol', 'ClosingPrice']]
 
     # Merge quantities and prices
     merged_df = quantities_df.merge(
@@ -380,6 +383,36 @@ def gen_assets_historical_value(symbols: list=[],
         merged_df = merged_df[merged_df['Quantity'] != 0]
     
     return merged_df
+
+def gen_aggregated_historical_value(dimension: str='Sector', 
+                                    cadence: str='daily',
+                                    start_date: str=None) -> pd.DataFrame:
+    """
+    Generate historical value of portfolio, aggregated by a given dimension
+    Dimension can be 'Sector' or 'Asset Type'
+    
+    Returns: aggregated_df -> 
+    Date, [Dimension], Value
+    2016-02-17  Aerospace + Defense    3545.51
+    2016-02-18  Aerospace + Defense    3581.38
+    """
+    assert(dimension in ['Sector', 'Asset Type'])   
+    
+    # Get all assets' historical values
+    assets_history_df = gen_assets_historical_value(cadence=cadence,
+                                                    start_date=start_date, 
+                                                    include_exit_date=False)
+    
+    # Add in Sector, Asset Type, etc columns 
+    expanded_df = add_asset_info(assets_history_df, truncate=False)
+    
+    # Aggregate by dimension and date, sum values, then convert to sorted DF
+    aggregated_df = expanded_df.groupby(['Date', dimension])['Value'].sum()
+    aggregated_df = aggregated_df.reset_index()
+    aggregated_df = aggregated_df.sort_values(by=[dimension, 'Date'], 
+                                              ascending=True)
+    
+    return aggregated_df
 
 def get_portfolio_summary() -> pd.DataFrame:
     """ 
@@ -437,7 +470,6 @@ def get_portfolio_current_value() -> tuple[pd.DataFrame, float]:
     
     return (summary_df, total_value)
 
-
 def add_asset_info(asset_df: pd.DataFrame, truncate=True) -> pd.DataFrame:
     """
     Given a dataframe of assets, add additional information* about each asset
@@ -466,12 +498,3 @@ def add_asset_info(asset_df: pd.DataFrame, truncate=True) -> pd.DataFrame:
 # TODO: BUILDIN ERROR HANDLING
 # Symbols that don't exist
 # Symbols that don't have any data
-
-# summary_df = get_portfolio_current_value()[0]
-# print_full(summary_df) 
-
-# out = gen_assets_historical_value(symbols=['MSFT', 'META'],
-#                                   cadence='daily',
-#                                   start_date='2023-08-01')
-
-# print_full(out)

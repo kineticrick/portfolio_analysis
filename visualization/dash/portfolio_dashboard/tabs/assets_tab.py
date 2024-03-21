@@ -4,7 +4,7 @@ import pandas as pd
 
 from visualization.dash.DashboardHandler import DashboardHandler
 from pandas.tseries.offsets import DateOffset
-from libraries.pandas_helpers import print_full
+from libraries.pandas import print_full
 
 import dash_bootstrap_components as dbc
 

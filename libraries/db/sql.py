@@ -71,9 +71,6 @@ insert_acquisitions_sql = \
 
 drop_splits_table_sql = "DROP TABLE IF EXISTS splits"
 drop_entities_table_sql = "DROP TABLE IF EXISTS entities"
-
-#gen_summary
-
 drop_summary_table_sql = "DROP TABLE IF EXISTS summary"
 
 create_summary_table_sql = \
@@ -100,22 +97,6 @@ insert_summary_sql = \
      "last_purchase_date='{last_purchase_date}',total_dividend='{total_dividend}',"
      "dividend_yield='{dividend_yield}'")
 
-# base_summary_query = \
-#     ("SELECT t1.name, t1.symbol, t1.current_shares, t2.total_dividend FROM "
-#         "(SELECT entities.name, trades.symbol, "
-#         "SUM(COALESCE(CASE WHEN trades.action='buy' "
-#                         "THEN trades.num_shares END, 0)) - "
-#         "SUM(COALESCE(CASE WHEN trades.action='sell' "
-#                         "THEN trades.num_shares END, 0)) "
-#         "current_shares FROM trades INNER JOIN entities ON "
-#         "entities.symbol = trades.symbol GROUP BY entities.name, trades.symbol "
-#         "HAVING current_shares > 0 ORDER BY trades.symbol) AS t1 "
-#         "LEFT JOIN "
-#         "(SELECT dividends.symbol, SUM(dividends.dividend) total_dividend FROM "
-#         "dividends GROUP BY dividends.symbol) AS t2 "
-#     "ON t1.symbol=t2.symbol ORDER BY t1.name")
-# base_summary_columns = ['Name', 'Symbol', 'CurrentShares', 'TotalDividend']
-    
 stocks_with_sales_query = \
     ("SELECT t1.symbol, t1.bought, t2.sold, t1.bought-t2.sold as remaining FROM "
         "(SELECT symbol, sum(num_shares) as bought FROM trades WHERE action='buy' "
@@ -239,3 +220,26 @@ insert_update_assets_hypothetical_history_sql = \
     
 read_assets_hypothetical_history_query = "SELECT * FROM assets_hypothetical_history"
 read_assets_hypothetical_history_columns = ['Date', 'Symbol', 'Quantity', 'ClosingPrice', 'Value']
+
+# SectorHistoryHelper - sectors_history table
+create_sectors_history_table_sql = \
+    ("CREATE TABLE IF NOT EXISTS sectors_history ("
+    "date DATE NOT NULL, "
+    "sector VARCHAR(40) NOT NULL, "
+    "value DECIMAL(13, 2) NOT NULL, "
+    "PRIMARY KEY (date, sector))")
+    
+insert_ignore_sectors_history_sql = \
+    ("INSERT IGNORE INTO sectors_history"
+     "(date, sector, value) "
+     "VALUES ('{date}','{sector}', '{value}')")
+    
+insert_update_sectors_history_sql = \
+    ("INSERT INTO sectors_history"
+     "(date, sector, value) "
+     "VALUES ('{date}','{sector}', '{value}') "
+     "ON DUPLICATE KEY UPDATE "
+     "date='{date}', sector='{sector}', value='{value}'")
+    
+read_sectors_history_query = "SELECT * FROM sectors_history"
+read_sectors_history_columns = ['Date', 'Sector', 'Value']
