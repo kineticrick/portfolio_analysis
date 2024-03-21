@@ -1,5 +1,3 @@
 __pycache__
 files
-libraries/cache
-generators/cache
-visualization/dash/cache
+cache/
