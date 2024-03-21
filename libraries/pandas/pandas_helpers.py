@@ -1,12 +1,12 @@
 import os
 import sys
 
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '../..'))
 
 import pandas as pd
-
-from libraries.mysqldb import MysqlDB
+from libraries.db import MysqlDB
 from diskcache import Cache
+
 cache = Cache("cache")
 
 TDAMERITRADE_CSV_TO_DB_COL_NAMES = {

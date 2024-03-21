@@ -1,257 +1,24 @@
-#!/usr/bin/env python 
+import datetime
 import os
 import sys
-
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-
-import datetime
 import pandas as pd
-from pandas.tseries.offsets import Day, BDay
 
-from collections import defaultdict
-from libraries.mysqldb import MysqlDB
-from libraries.dbcfg import *
-from libraries.sql import (create_assets_history_table_sql, insert_update_assets_history_sql, 
-                           insert_ignore_assets_history_sql, read_assets_history_query, 
-                           read_assets_history_columns, create_portfolio_history_table_sql, 
-                           insert_update_portfolio_history_sql, insert_ignore_portfolio_history_sql, 
-                           read_portfolio_history_query, read_portfolio_history_columns,
-                           create_assets_hypothetical_history_table_sql, insert_update_assets_hypothetical_history_sql, 
-                           insert_ignore_assets_hypothetical_history_sql, read_assets_hypothetical_history_query, 
+sys.path.append(os.path.join(os.path.dirname(__file__), '../..'))
+
+from libraries.HistoryHandlers import BaseHistoryHandler, AssetHistoryHandler
+from libraries.db import dbcfg, MysqlDB
+from libraries.db.sql import (create_assets_hypothetical_history_table_sql, 
+                           insert_update_assets_hypothetical_history_sql, 
+                           insert_ignore_assets_hypothetical_history_sql, 
+                           read_assets_hypothetical_history_query, 
                            read_assets_hypothetical_history_columns)
-from libraries.pandas_helpers import print_full, mysql_to_df
+from libraries.pandas import print_full, mysql_to_df
 from libraries.helpers import (build_master_log, gen_hist_quantities_mult, 
-                               gen_assets_historical_value, get_historical_prices)
+                               get_historical_prices)
 from libraries.vars import SYMBOL_BLACKLIST
+from pandas.tseries.offsets import BDay
 
-class HistoryHandler:
-    # Placeholder for SQL to create history table in DB
-    create_history_table_sql = None
-    
-    def __init__(self) -> None:
-        """ 
-        Initialize handler with updated history from DB, for either assets or total portfolio
-        """
-        # Initialize {asset,portfolio,asset_hypothetical}_history table in DB, if not already present
-        self.gen_table()
-        
-        # Retrieve history from DB
-        self.history_df = self.get_history()
-        refresh_history = False
-        if not self.history_df.empty:
-            
-            # Get latest date from dataframe
-            latest_history_date = self.history_df['Date'].max()
-            
-            today = datetime.datetime.today()
-            previous_business_date = today  - BDay(1)
-            previous_business_date = previous_business_date.date()
-
-            # If latest history date in DB is behind most recent trading day, 
-            # update history from day after latest date to today
-            if latest_history_date < previous_business_date:
-                
-                self.set_history(start_date=latest_history_date + Day(1))
-                refresh_history = True
-                
-        # If dataframe is empty, update history from start of time to today
-        else:
-            self.set_history()
-            refresh_history = True
-            
-        if refresh_history:
-            # Retrieve history from DB
-            self.history_df = self.get_history()
-            
-        self.latest_history_date = self.get_latest_date()
-    
-    def gen_table(self) -> None:
-        """
-        Generate asset_history table in DB, if not already present
-        """
-        with MysqlDB(dbcfg) as db:
-            db.execute(self.create_history_table_sql)
-
-        # TODO: Figure out better way to instantiate table if not present 
-        
-    
-    def get_history(self) -> None:
-        pass
-    
-    def set_history(self) -> None:
-        pass
-    
-    def get_latest_date(self) -> str:
-        """
-        Get date of most recent entry available in DB
-        
-        Returns:
-            latest_date (str): Latest date in DB
-        """
-        return self.history_df['Date'].max()
-    
-    
-    # def validate_history(self) -> None:
-        # """ 
-        # Ensure that all expected dates are present and accounted for 
-        # (ie there are no unexpected gaps in business/trading days for assets indicated)
-        # """
-        
-class AssetHistoryHandler(HistoryHandler):
-    create_history_table_sql = create_assets_history_table_sql
-    
-    def __init__(self, symbols: list=[]) -> None: 
-        """ 
-        For all symbols in symbols, initialize object with updated 
-        asset histories from DB. (Date, symbol, quantity, price, value)
-        
-        If 'symbols' is empty, initialize object with all asset histories from DB.
-        """
-        assert(isinstance(symbols, list))
-        self.symbols = symbols   
-
-        super().__init__()
-
-    def set_history(self, start_date: str=None, overwrite: bool=False) -> None:
-        """
-        For all symbols in self.symbols, update DB with asset history info 
-        from start_date to today
-        
-        If overwrite is True, overwrite all existing history in DB with new derived history
-        Else, only add new history to DB (append-only)
-        
-        Args:
-            start_date (str): Date to start history from (inclusive)
-        """
-        # Retrieve daily quantity + value data for all symbols in self.symbols
-        assets_historical_data_df = \
-            gen_assets_historical_value(self.symbols, cadence='daily', 
-                                        start_date=start_date, 
-                                        include_exit_date=False)
-        column_conversion_map = {
-            'date': 'Date',
-            'symbol': 'Symbol',
-            'quantity': 'Quantity',
-            'closing_price': 'ClosingPrice', 
-            'value': 'Value'
-        }
-        
-        # Generate Insert/Update SQL for each row in assets_historical_data_df
-        with MysqlDB(dbcfg) as db:
-            for _, history_data in assets_historical_data_df.iterrows():
-                insertion_dict = {}
-                for k, v in column_conversion_map.items():
-                    insertion_dict[k] = history_data[v]
-                    
-                if overwrite:
-                    insertion_sql = \
-                        insert_update_assets_history_sql.format(**insertion_dict)
-                else: 
-                    insertion_sql = \
-                        insert_ignore_assets_history_sql.format(**insertion_dict)
-                db.execute(insertion_sql)
-            
-    def get_history(self) -> pd.DataFrame:
-        """
-        For all symbols in self.symbols, get asset history from DB into dataframe
-        
-        
-        Returns:
-            history_df (pd.DataFrame): 
-                Date, Symbol, Quantity, ClosingPrice, Value 
-        """
-        symbols_clause = \
-            "(" + ", ".join([f"'{symbol}'" for symbol in self.symbols]) + ")"
-        symbols_str = " WHERE symbol IN " + symbols_clause if len(self.symbols) > 0 else ""
-        
-        query = read_assets_history_query + symbols_str
-        history_df = mysql_to_df(query, read_assets_history_columns, dbcfg, cached=True)
-        return history_df
-        
-class PortfolioHistoryHandler(HistoryHandler):
-    create_history_table_sql = create_portfolio_history_table_sql
-    
-    def __init__(self, assets_history_df: pd.DataFrame=None) -> None:
-        """ 
-        Initialize object with updated portfolio history from DB, 
-        which contains a total value of the entire portfolio (all assets)
-        for each day of existence
-       
-        (Date, value)
-        """
-        self.assets_history_df = assets_history_df
-        super().__init__()
-
-    def set_history(self, start_date: str=None, overwrite: bool=False) -> None:
-        """
-        Update DB with portfolio history info from start_date to today
-        
-        If overwrite is True, overwrite all existing history in DB with 
-        new derived history. Else, only add new history to DB (append-only)
-        
-        Args:
-            start_date (str): Date to start history from (inclusive)
-        """
-        
-        if self.assets_history_df is None: 
-            # Initialize asset_history_handler with all symbols, to ensure that full 
-            # portfolio history can be derived + up-to-date
-            asset_history_handler = AssetHistoryHandler()
-            
-            # Get asset history from DB into dataframe
-            self.assets_history_df = asset_history_handler.history_df
-        
-        # Aggregate over dates to get total portfolio value for each day
-        daily_portfolio_value_df = self.assets_history_df.groupby('Date')['Value'].sum()
-        
-        # Convert from Series to DataFrame
-        daily_portfolio_value_df = daily_portfolio_value_df.reset_index()
-        
-        # Set date column as index 
-        daily_portfolio_value_df['Date'] = pd.to_datetime(daily_portfolio_value_df['Date'])
-        # daily_portfolio_value_df = daily_portfolio_value_df.set_index('Date')
-        
-        # Filter to just start_date to today
-        if start_date is not None:
-            daily_portfolio_value_df = \
-                daily_portfolio_value_df[daily_portfolio_value_df['Date'] >= start_date]
-
-        column_conversion_map = {
-            'date': 'Date',
-            'value': 'Value',
-        }
-    
-        # Insert into DB
-        with MysqlDB(dbcfg) as db:
-            for _, history_data in daily_portfolio_value_df.iterrows():
-                insertion_dict = {}
-                for k, v in column_conversion_map.items():
-                    insertion_dict[k] = history_data[v]
-                
-                # Convert date to date object
-                insertion_dict['date'] = insertion_dict['date'].date()
-                if overwrite:
-                    insertion_sql = \
-                        insert_update_portfolio_history_sql.format(**insertion_dict)
-                else: 
-                    insertion_sql = \
-                        insert_ignore_portfolio_history_sql.format(**insertion_dict)
-                db.execute(insertion_sql)
-
-    def get_history(self) -> pd.DataFrame:
-        """
-        Get portfolio history from DB and place into dataframe
-        
-        Returns:
-            history_df (pd.DataFrame): 
-                Date, Value
-        """
-        history_df = mysql_to_df(read_portfolio_history_query, 
-                                 read_portfolio_history_columns, dbcfg, cached=True)
-        
-        return history_df
-
-class AssetHypotheticalHistoryHandler(HistoryHandler):
+class AssetHypotheticalHistoryHandler(BaseHistoryHandler):
     create_history_table_sql = create_assets_hypothetical_history_table_sql
     
     def __init__(self, symbols: list=[], 
@@ -488,13 +255,3 @@ class AssetHypotheticalHistoryHandler(HistoryHandler):
         history_df['Owned'] = "Hypothetical"
 
         return history_df
-
-# ahh = AssetHypotheticalHistoryHandler()
-
-# ph = PortfolioHistoryHandler()
-# print_full(ph.get_history())
-# ah = AssetHistoryHandler()
-# ph = PortfolioHistoryHandler()
-# ahh = AssetHypotheticalHistoryHandler()
-# out = ah.get_history()
-# print_full(out)
