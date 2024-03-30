@@ -1,25 +1,12 @@
 from dash import (callback, dcc, dash_table, Input, Output)
 import plotly.express as px
 
-from visualization.dash.DashboardHandler import DashboardHandler
+from visualization.dash.portfolio_dashboard.globals import *
 
 import dash_bootstrap_components as dbc
 
-dash_handler = DashboardHandler()
-
-asset_hypo_df = dash_handler.assets_hypothetical_history_df
-
-asset_hypo_fig = px.line(
-    asset_hypo_df,
-    x=asset_hypo_df['Date'], 
-    y=asset_hypo_df['ClosingPrice'],
-    color=asset_hypo_df['Symbol'],
-    line_dash=asset_hypo_df['Owned'],
-)
-asset_hypo_fig.update_layout(height=800)
-
-normalized_hypo_df = dash_handler.exits_hypotheticals_history_df
-normalized_hypo_df = dash_handler.expand_history_df(normalized_hypo_df)
+normalized_hypo_df = DASH_HANDLER.exits_hypotheticals_history_df
+normalized_hypo_df = DASH_HANDLER.expand_history_df(normalized_hypo_df)
 
 normalized_hypo_fig = px.line(
     normalized_hypo_df,
@@ -34,7 +21,7 @@ sectors = normalized_hypo_df['Sector'].unique().tolist()
 sectors = [{'label': x, 'value': x} for x in sectors]
 sectors = sorted(sectors, key=lambda x: x['label'])
 
-asset_hypo_stats_df = dash_handler.gen_historical_stats(asset_hypo_df, hypotheticals=True)
+asset_hypo_stats_df = DASH_HANDLER.gen_historical_stats(asset_hypo_df, hypotheticals=True)
 asset_hypo_stats_df = asset_hypo_stats_df[['Name', 'Symbol', 'Sector', 'Hypo Ret.(Exit/Current)%']]
 
 @callback(
@@ -93,18 +80,6 @@ def update_normalized_hypo_graph(sectors, assets):
 
 hypotheticals_tab = dbc.Container(
     [
-        dbc.Row(
-            dbc.Col(
-                dbc.Card(
-                    dcc.Graph(
-                        id='hypothetical-history-graph',
-                        figure=asset_hypo_fig
-                    ),
-                ),
-                width={'size': 12}
-            ),
-            justify='start'
-        ),
         dbc.Row([
             dbc.Col(
                 dcc.Dropdown(

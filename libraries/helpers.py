@@ -10,7 +10,7 @@ import datetime
 
 from collections import defaultdict
 from libraries.db import dbcfg
-from libraries.pandas import print_full, mysql_to_df
+from libraries.pandas_helpers import print_full, mysql_to_df
 from libraries.db.sql import (master_log_buys_query,
                               master_log_buys_columns,
                               master_log_sells_query,
@@ -25,8 +25,8 @@ from libraries.db.sql import (master_log_buys_query,
                               read_entities_table_columns,
                               read_summary_table_query, 
                               read_summary_table_columns)
-from libraries.yfinance import get_historical_prices, get_current_price
-from libraries.vars import (NON_QUANTITY_ASSET_EVENTS, ASSET_EVENTS, 
+from libraries.yfinance_helpers import get_historical_prices, get_current_price
+from libraries.globals import (NON_QUANTITY_ASSET_EVENTS, ASSET_EVENTS, 
                             MASTER_LOG_COLUMNS, CADENCE_MAP)
 from pandas.tseries.offsets import BDay
 
@@ -117,7 +117,7 @@ def build_master_log(symbols: list=[]) -> pd.DataFrame:
     return master_log_df
 
 def gen_hist_quantities(asset_event_log_df: pd.DataFrame, 
-                        cadence: str=str, 
+                        cadence: str='daily', 
                         expand_chronology: bool=True) -> pd.DataFrame:
     """ 
     Based on log of asset events (buy, sell, split, etc) for a single asset,
@@ -128,11 +128,12 @@ def gen_hist_quantities(asset_event_log_df: pd.DataFrame,
     If False, then only dates with a quantity change will be included.
     
     Returns: quantities_df
-        Date, Symbol, Action, Quantity (net)
-        2019-01-01, MSFT, buy, 100
-        2019-06-12, MSFT, sell, 50
+        Date, Symbol, quantity (net)
+        2019-01-01, MSFT, 100
+        2019-06-12, MSFT, 50
     """
     #TODO: Ensure only one symbol is passed in
+    assert(len(asset_event_log_df['Symbol'].unique()) == 1)
     
     # Remove non-quantity events, like dividend 
     # ('~' is the bitwise NOT operator)
@@ -147,6 +148,15 @@ def gen_hist_quantities(asset_event_log_df: pd.DataFrame,
     # Indexed by date to ensure that we only have one row per date
     all_events = defaultdict(dict)
     total_quantity = 0
+    
+    # Initialize objects for cost basis determination
+    cost_basis = 0
+    # Will be list of dicts, where dicts will hold: 
+    #   Date: Date of purchase
+    #   initial_quantity: quantity of shares purchased
+    #   remaining_quantity: quantity of shares remaining from this purchase tranche
+    #   purchase_price: price per share at time of purchase
+    purchase_list = []
     for _, event in asset_event_log_df.iterrows():
         date = event['Date']
         symbol = event['Symbol']
@@ -157,17 +167,58 @@ def gen_hist_quantities(asset_event_log_df: pd.DataFrame,
         action = event['Action']
         quantity = event['Quantity']
         multiplier = event['Multiplier']
+        price_per_share = event['PricePerShare']
         
         match action:
             case 'buy':
                 total_quantity += quantity
                 
+                # Add to cost basis
+                cost_basis += quantity * price_per_share
+                
+                # Add to purchase list
+                purchase_list.append({
+                    'Date': date,
+                    'initial_quantity': quantity,
+                    'remaining_quantity': quantity,
+                    'purchase_price': price_per_share
+                })
+                
+                # Sort list by date to ensure that we sell/deduct 
+                # from the oldest shares first
+                purchase_list.sort(key=lambda x: x['Date'])
+                
             case 'sell':
                 total_quantity -= quantity
+                
+                # Handle Cost Basis adjustment
+                # Sell shares from oldest purchase first, then proceed to next purchase 
+                # until all sold shares are accounted for
+                for purchase in purchase_list:
+                    # If the amount sold is larger than what is in this purchase tranche
+                    # then remove the entire remaining purchase tranche 
+                    # and subtract from cost basis 
+                    if quantity >= purchase['remaining_quantity']:
+                        quantity -= purchase['remaining_quantity']
+                        cost_basis -= \
+                            purchase['remaining_quantity'] * purchase['purchase_price']
+                        purchase['remaining_quantity'] = 0
+                    # If the amount sold is smaller than what is in this purchase tranche, 
+                    # then reduce tranche by amount sold and update cost basis
+                    else:
+                        cost_basis -= quantity * purchase['purchase_price']
+                        purchase['remaining_quantity'] -= quantity
+                        break
                 
             case 'split':
                 total_quantity *= multiplier
                 
+                # Handle cost basis
+                for purchase in purchase_list:
+                    purchase['initial_quantity'] *= multiplier
+                    purchase['remaining_quantity'] *= multiplier
+                    purchase['purchase_price'] /= multiplier
+
             case 'acquisition-target':
                 total_quantity = 0
                 
@@ -180,13 +231,16 @@ def gen_hist_quantities(asset_event_log_df: pd.DataFrame,
                     get_asset_quantity_by_date(target, day_before.strftime('%Y-%m-%d'))
 
                 target_prior_quantity = target_prior_quantity_df['Quantity']
+                target_prior_cost_basis = target_prior_quantity_df['CostBasis']
 
                 # Add the quantity of the target asset * multiplier to the acquirer's total
                 target_prior_quantity *= multiplier
                 target_prior_quantity = math.floor(target_prior_quantity)
                 total_quantity += target_prior_quantity
+                cost_basis += target_prior_cost_basis
     
         all_events[date]['Quantity'] = total_quantity
+        all_events[date]['CostBasis'] = cost_basis
 
     all_events = list(all_events.values())        
     quantities_df = pd.DataFrame(all_events)
@@ -220,6 +274,8 @@ def gen_hist_quantities(asset_event_log_df: pd.DataFrame,
         # IE Set quantity to last/current, as of that date
         quantities_df['Quantity'] = quantities_df['Quantity'].fillna(method='ffill')
         quantities_df['Symbol'] = quantities_df['Symbol'].fillna(method='ffill')
+        quantities_df['CostBasis'] = \
+            quantities_df['CostBasis'].fillna(method='ffill')
         
         # Downsample to specified cadence
         # quantities_df = quantities_df.asfreq(BUSINESS_CADENCE_MAP[cadence])
@@ -230,7 +286,7 @@ def gen_hist_quantities(asset_event_log_df: pd.DataFrame,
     return quantities_df
 
 def gen_hist_quantities_mult(assets_event_log_df: pd.DataFrame, 
-                             cadence: str=str, 
+                             cadence: str='daily', 
                              expand_chronology: bool=True) -> pd.DataFrame:
     """
     Given an event log of multiple assets, generate a dataframe of historical
@@ -298,9 +354,9 @@ def gen_assets_historical_value(symbols: list=[],
     final date on which a non-zero amount of shares was held at close of the day. 
     
     Returns: merged_df -> 
-    Date, Symbol, Quantity, Close, Value (Quantity * Close)
-    2019-01-01, MSFT, 100, 67, 6700
-    2019-01-02, MSFT, 100, 68, 6800
+    Date, Symbol, Quantity, CostBasis, Close, Value (Quantity * Close), PercentReturn (CostBasis vs Value)
+    2019-01-01, MSFT, 100, 7657, 67, 6700, 57.12
+    2019-01-02, MSFT, 100, 7657, 68, 6800, 57.58
     """
     assert(cadence in CADENCE_MAP.keys())
     assert(type(symbols) == list)
@@ -377,6 +433,10 @@ def gen_assets_historical_value(symbols: list=[],
     today = datetime.datetime.today().strftime('%Y-%m-%d')
     merged_df = merged_df[merged_df['Date'] != today]
     
+    # Generate daily return column based on growth from cost basis to current value
+    merged_df['PercentReturn'] = \
+        (merged_df['Value'] - merged_df['CostBasis']) / merged_df['CostBasis'] * 100
+    
     # Remove all rows with quantity=0 (ie days on which the asset was sold and went to 0)
     # Should only be 1 row per exited asset 
     if not include_exit_date: 
@@ -384,31 +444,39 @@ def gen_assets_historical_value(symbols: list=[],
     
     return merged_df
 
-def gen_aggregated_historical_value(dimension: str='Sector', 
+def gen_aggregated_historical_value(symbols: list=[],
+                                    dimension: str='Sector', 
                                     cadence: str='daily',
                                     start_date: str=None) -> pd.DataFrame:
     """
     Generate historical value of portfolio, aggregated by a given dimension
+    Aggregation is done by taking the average of daily percent return values of 
+    all member assets within the sector
     Dimension can be 'Sector' or 'Asset Type'
     
     Returns: aggregated_df -> 
-    Date, [Dimension], Value
+    Date, [Dimension], AvgPercentReturn
     2016-02-17  Aerospace + Defense    3545.51
     2016-02-18  Aerospace + Defense    3581.38
     """
-    assert(dimension in ['Sector', 'Asset Type'])   
+    assert(type(symbols) == list)
+    assert(dimension in ['Sector', 'Asset Type'])
+    assert(cadence in CADENCE_MAP.keys()) 
     
     # Get all assets' historical values
-    assets_history_df = gen_assets_historical_value(cadence=cadence,
+    assets_history_df = gen_assets_historical_value(symbols=symbols,
+                                                    cadence=cadence,
                                                     start_date=start_date, 
                                                     include_exit_date=False)
     
     # Add in Sector, Asset Type, etc columns 
     expanded_df = add_asset_info(assets_history_df, truncate=False)
     
-    # Aggregate by dimension and date, sum values, then convert to sorted DF
-    aggregated_df = expanded_df.groupby(['Date', dimension])['Value'].sum()
+    # Aggregate by dimension and date, then take average of daily percent 
+    # return values for each member asset within the sector
+    aggregated_df = expanded_df.groupby(['Date', dimension])['PercentReturn'].mean()
     aggregated_df = aggregated_df.reset_index()
+    aggregated_df = aggregated_df.rename(columns={'PercentReturn':'AvgPercentReturn'})
     aggregated_df = aggregated_df.sort_values(by=[dimension, 'Date'], 
                                               ascending=True)
     
@@ -487,9 +555,10 @@ def add_asset_info(asset_df: pd.DataFrame, truncate=True) -> pd.DataFrame:
         read_entities_table_query, read_entities_table_columns, 
         dbcfg, cached=True)
         
+    # Truncates long strings to 20 characters, for better display
     if truncate:
         for col in asset_info_df.select_dtypes(include='object'):
-            asset_info_df[col] = asset_info_df[col].str.slice(0, 20)
+            asset_info_df[col] = asset_info_df[col].str.slice(0, 25)
         
     asset_df = asset_df.merge(asset_info_df, on='Symbol', how='left')
     

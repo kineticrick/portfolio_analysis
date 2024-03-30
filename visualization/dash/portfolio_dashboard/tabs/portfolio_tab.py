@@ -2,28 +2,15 @@ from dash import callback, dcc, html, dash_table, Input, Output
 import plotly.graph_objs as go
 import plotly.express as px
 import pandas as pd
-from visualization.dash.DashboardHandler import DashboardHandler
+from visualization.dash.portfolio_dashboard.globals import *
 from pandas.tseries.offsets import DateOffset
 import dash_bootstrap_components as dbc
-
-dash_handler = DashboardHandler()
-
-NUM_WINNERS_LOSERS = 5
-PORTFOLIO_DEFAULT_INTERVAL = '1d'
-
-# Current + Milestone Values (Scalars)
-current_value = dash_handler.current_portfolio_value
-portfolio_milestones = dash_handler.portfolio_milestones
-yesterday_value = portfolio_milestones.loc[
-    portfolio_milestones['Interval'] == '1d']['Value'].values[0]
-portfolio_milestones = portfolio_milestones[['Interval', 'Value', 'Value % Return']]
-intervals = portfolio_milestones['Interval'].values.tolist()
 
 @callback(
     Output('portfolio-history-graph', 'figure'),
     Input('interval-dropdown', 'value'))
 def update_port_hist_graph(interval):
-    interval_days = {k:v for (k,v) in dash_handler.performance_milestones}
+    interval_days = {k:v for (k,v) in DASH_HANDLER.performance_milestones}
     
     if interval == "Lifetime":
         date = port_hist_df.index[-1]
@@ -33,7 +20,7 @@ def update_port_hist_graph(interval):
         date =  pd.to_datetime('today') - offset
         date = date.strftime('%Y-%m-%d')
         
-    port_hist_df = dash_handler.portfolio_history_df
+    port_hist_df = DASH_HANDLER.portfolio_history_df
     port_hist_df = \
         port_hist_df[port_hist_df.index >= date]
         
@@ -61,14 +48,14 @@ def update_port_hist_graph(interval):
     Output('losers-table', 'data'),
     Input('interval-dropdown', 'value'))
 def update_asset_tables(interval):
-    winners_df = dash_handler.get_ranked_assets(
+    winners_df = DASH_HANDLER.get_ranked_assets(
         interval, 'price', ascending=False, count=NUM_WINNERS_LOSERS)
     winners_df = winners_df[['Symbol', 'Interval', 'Current Price', 
                              'Price', 'Price % Return']]
     winners_columns=[{"name": i, "id": i} for i in winners_df.columns]
     winners_data = winners_df.to_dict('records')
 
-    losers_df = dash_handler.get_ranked_assets(
+    losers_df = DASH_HANDLER.get_ranked_assets(
         interval, 'price', ascending=True, count=NUM_WINNERS_LOSERS)
     losers_df = losers_df[['Symbol', 'Interval', 'Current Price', 
                            'Price', 'Price % Return']]
@@ -81,14 +68,14 @@ def update_asset_tables(interval):
     Output('portfolio-value-scalar', 'figure'),
     Input('interval-dropdown', 'value'))
 def update_portfolio_value(interval):
-    milestone_value = portfolio_milestones.loc[
-        portfolio_milestones['Interval'] == interval]['Value'].values[0]
+    milestone_value = PORTFOLIO_MILESTONES.loc[
+        PORTFOLIO_MILESTONES['Interval'] == interval]['Value'].values[0]
     
     port_value_fig = go.Figure()
 
     port_value_fig.add_trace(go.Indicator(
         mode = "number+delta",
-        value = current_value,
+        value = CURRENT_PORTFOLIO_VALUE,
         number = {'valueformat': '$,.2f'},
         # domain = {'x': [0, 0.5], 'y': [0, 0.5]},
         delta = {'reference': milestone_value, 
@@ -121,7 +108,7 @@ portfolio_tab = dbc.Container(
                     "Select period:", 
                     dcc.Dropdown(
                         id='interval-dropdown',
-                        options=intervals, 
+                        options=INTERVALS, 
                         value=PORTFOLIO_DEFAULT_INTERVAL,
                     ),
                 ],),
@@ -149,8 +136,8 @@ portfolio_tab = dbc.Container(
                         dash_table.DataTable(
                             id='portfolio-milestones-table',
                             columns=[{"name": i, "id": i} 
-                                for i in portfolio_milestones.columns],
-                            data=portfolio_milestones.to_dict('records'),
+                                for i in PORTFOLIO_MILESTONES.columns],
+                            data=PORTFOLIO_MILESTONES.to_dict('records'),
                         )], 
                         gap=3
                     ), 

@@ -11,7 +11,7 @@ from libraries.db.sql import (create_portfolio_history_table_sql,
                               read_portfolio_history_query, 
                               read_portfolio_history_columns)
 from libraries.HistoryHandlers import BaseHistoryHandler, AssetHistoryHandler
-from libraries.pandas import print_full, mysql_to_df
+from libraries.pandas_helpers import print_full, mysql_to_df
 
 class PortfolioHistoryHandler(BaseHistoryHandler):
     create_history_table_sql = create_portfolio_history_table_sql

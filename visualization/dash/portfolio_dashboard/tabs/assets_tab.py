@@ -2,21 +2,11 @@ from dash import callback, dcc, dash_table, Input, Output
 import plotly.express as px
 import pandas as pd
 
-from visualization.dash.DashboardHandler import DashboardHandler
+from visualization.dash.portfolio_dashboard.globals import *
 from pandas.tseries.offsets import DateOffset
-from libraries.pandas import print_full
+from libraries.pandas_helpers import print_full
 
 import dash_bootstrap_components as dbc
-
-dash_handler = DashboardHandler()
-
-# Get intervals to display in dropdown
-milestones = dash_handler.portfolio_milestones
-
-#['1d', '1w', '1m', '3m', '6m', '1y', '2y', '3y', '5y', 'Lifetime']
-intervals = milestones['Interval'].values.tolist()
-
-ASSETS_DEFAULT_INTERVAL = 'Lifetime' 
 
 @callback(
     Output('assets-table', 'columns'),
@@ -25,7 +15,7 @@ ASSETS_DEFAULT_INTERVAL = 'Lifetime'
 )
 def update_assets_table(interval): 
     # Get basis for data table/spreadsheet for assets
-    assets_table_df = dash_handler.assets_summary_df
+    assets_table_df = DASH_HANDLER.assets_summary_df
     
     # Add id column to dataframe, to be used in row selection 
     if 'id' not in assets_table_df.columns:
@@ -50,7 +40,7 @@ def update_assets_table(interval):
     Input('assets-interval-dropdown', 'value'))
 def update_assets_hist_graph(selected_row_ids, interval):
     # Generate base dataframe containing all history for all assets
-    assets_history_df = dash_handler.portfolio_assets_history_df
+    assets_history_df = DASH_HANDLER.portfolio_assets_history_df
 
     if selected_row_ids:
         assets_history_df = assets_history_df[
@@ -60,7 +50,7 @@ def update_assets_hist_graph(selected_row_ids, interval):
     # Otherwise, reduce data to only include data from the start date
     if interval != "Lifetime":
         # Determine number of days to display for each asset
-        interval_days = {k:v for (k,v) in dash_handler.performance_milestones}
+        interval_days = {k:v for (k,v) in DASH_HANDLER.performance_milestones}
 
         days = interval_days[interval]
         offset = DateOffset(days=days)
@@ -70,7 +60,7 @@ def update_assets_hist_graph(selected_row_ids, interval):
         assets_history_df = \
             assets_history_df[assets_history_df['Date'] >= start_date]
 
-    assets_history_df = dash_handler.expand_history_df(assets_history_df)
+    assets_history_df = DASH_HANDLER.expand_history_df(assets_history_df)
     
     # Generate Dash line graph for assets
     assets_history_fig = px.line(
@@ -115,10 +105,10 @@ assets_tab = dbc.Container(
         dbc.Row([
             dbc.Col(
                 dcc.Dropdown(
-                    # options=[{'label': i, 'value': i} for i in intervals],
+                    # options=[{'label': i, 'value': i} for i in INTERVALS],
                     id='assets-interval-dropdown',
-                    options=intervals,
-                    value=ASSETS_DEFAULT_INTERVAL,
+                    options=INTERVALS,
+                    value=DEFAULT_INTERVAL,
                     placeholder='Select interval',
                 ),
                 width={'offset': 1, 'size': 3}

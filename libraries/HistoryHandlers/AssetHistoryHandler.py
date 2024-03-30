@@ -9,7 +9,7 @@ from libraries.db.sql import (create_assets_history_table_sql, insert_update_ass
                            insert_ignore_assets_history_sql, read_assets_history_query, 
                            read_assets_history_columns)
 from libraries.HistoryHandlers import BaseHistoryHandler
-from libraries.pandas import print_full, mysql_to_df
+from libraries.pandas_helpers import print_full, mysql_to_df
 from libraries.helpers import gen_assets_historical_value
 
 class AssetHistoryHandler(BaseHistoryHandler):
@@ -47,8 +47,10 @@ class AssetHistoryHandler(BaseHistoryHandler):
             'date': 'Date',
             'symbol': 'Symbol',
             'quantity': 'Quantity',
+            'cost_basis': 'CostBasis',
             'closing_price': 'ClosingPrice', 
-            'value': 'Value'
+            'value': 'Value',
+            'percent_return': 'PercentReturn',
         }
         
         # Generate Insert/Update SQL for each row in assets_historical_data_df
@@ -73,7 +75,7 @@ class AssetHistoryHandler(BaseHistoryHandler):
         
         Returns:
             history_df (pd.DataFrame): 
-                Date, Symbol, Quantity, ClosingPrice, Value 
+                Date, Symbol, Quantity, ClosingPrice, Value, CostBasis  
         """
         symbols_clause = \
             "(" + ", ".join([f"'{symbol}'" for symbol in self.symbols]) + ")"
