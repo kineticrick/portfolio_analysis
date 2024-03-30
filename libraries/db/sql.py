@@ -121,8 +121,8 @@ read_entities_table_columns = ['Name', 'Symbol', 'Asset Type', 'Sector']
 
 ### Master Log Summary Method ###
 master_log_buys_query = \
-    "SELECT date, symbol, action, num_shares FROM trades WHERE action='buy'"
-master_log_buys_columns = ['Date', 'Symbol', 'Action', 'Quantity']
+    "SELECT date, symbol, action, num_shares, price_per_share FROM trades WHERE action='buy'"
+master_log_buys_columns = ['Date', 'Symbol', 'Action', 'Quantity', 'PricePerShare']
 
 master_log_sells_query = \
     "SELECT date, symbol, action, num_shares FROM trades WHERE action='sell'"
@@ -156,25 +156,27 @@ create_assets_history_table_sql = \
     "date DATE NOT NULL, "
     "symbol VARCHAR(4) NOT NULL, "
     "quantity INT NOT NULL, "
+    "cost_basis DECIMAL(13, 2) NOT NULL, "
     "closing_price DECIMAL(13, 2) NOT NULL, "
     "value DECIMAL(13, 2) NOT NULL, "
+    "percent_return DECIMAL(13, 2) NOT NULL, "
     "PRIMARY KEY (date, symbol))")
     
 insert_ignore_assets_history_sql = \
     ("INSERT IGNORE INTO assets_history"
-     "(date, symbol, quantity, closing_price, value) "
-     "VALUES ('{date}','{symbol}', '{quantity}', '{closing_price}', '{value}')")
+     "(date, symbol, quantity, cost_basis, closing_price, value, percent_return) "
+     "VALUES ('{date}','{symbol}', '{quantity}', '{cost_basis}', '{closing_price}', '{value}', '{percent_return}')")
     
 insert_update_assets_history_sql = \
     ("INSERT INTO assets_history"
-     "(date, symbol, quantity, closing_price, value) "
-     "VALUES ('{date}','{symbol}', '{quantity}', '{closing_price}', '{value}') "
+     "(date, symbol, quantity, cost_basis, closing_price, value, percent_return) "
+     "VALUES ('{date}','{symbol}', '{quantity}', '{cost_basis}', '{closing_price}', '{value}', '{percent_return}') "
      "ON DUPLICATE KEY UPDATE "
      "date='{date}', symbol='{symbol}', quantity='{quantity}', "
-     "closing_price='{closing_price}', value='{value}'")
+     "cost_basis='{cost_basis}', closing_price='{closing_price}', value='{value}', percent_return='{percent_return}'")
     
 read_assets_history_query = "SELECT * FROM assets_history"
-read_assets_history_columns = ['Date', 'Symbol', 'Quantity', 'ClosingPrice', 'Value']
+read_assets_history_columns = ['Date', 'Symbol', 'Quantity', 'CostBasis', 'ClosingPrice', 'Value', 'PercentReturn']
 
 #HistoryHelper - portfolio_history table
 create_portfolio_history_table_sql = \
@@ -226,20 +228,20 @@ create_sectors_history_table_sql = \
     ("CREATE TABLE IF NOT EXISTS sectors_history ("
     "date DATE NOT NULL, "
     "sector VARCHAR(40) NOT NULL, "
-    "value DECIMAL(13, 2) NOT NULL, "
+    "avg_percent_return DECIMAL(13, 2) NOT NULL, "
     "PRIMARY KEY (date, sector))")
     
 insert_ignore_sectors_history_sql = \
     ("INSERT IGNORE INTO sectors_history"
-     "(date, sector, value) "
-     "VALUES ('{date}','{sector}', '{value}')")
+     "(date, sector, avg_percent_return) "
+     "VALUES ('{date}','{sector}', '{avg_percent_return}')")
     
 insert_update_sectors_history_sql = \
     ("INSERT INTO sectors_history"
-     "(date, sector, value) "
-     "VALUES ('{date}','{sector}', '{value}') "
+     "(date, sector, avg_percent_return) "
+     "VALUES ('{date}','{sector}', '{avg_percent_return}') "
      "ON DUPLICATE KEY UPDATE "
-     "date='{date}', sector='{sector}', value='{value}'")
+     "date='{date}', sector='{sector}', avg_percent_return='{avg_percent_return}'")
     
 read_sectors_history_query = "SELECT * FROM sectors_history"
-read_sectors_history_columns = ['Date', 'Sector', 'Value']
+read_sectors_history_columns = ['Date', 'Sector', 'AvgPercentReturn']

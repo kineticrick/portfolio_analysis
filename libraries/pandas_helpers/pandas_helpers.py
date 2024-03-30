@@ -5,6 +5,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../..'))
 
 import pandas as pd
 from libraries.db import MysqlDB
+from libraries.globals import MYSQL_CACHE_ENABLED, MYSQL_CACHE_TTL
 from diskcache import Cache
 
 cache = Cache("cache")
@@ -56,7 +57,7 @@ def print_full(df):
     pd.reset_option('display.max_columns')
     pd.reset_option('display.width')
 
-@cache.memoize(expire=60*5)
+@cache.memoize(expire=MYSQL_CACHE_TTL)
 def mysql_query(query, dbcfg):
     with MysqlDB(dbcfg) as db:
         return db.query(query)
@@ -69,12 +70,10 @@ def mysql_to_df(query, columns, dbcfg, cached=False, verbose=False):
         print(f"Query: {query}")
         print(f"Columns: {', '.join(columns)}")
 
-    # Use this to bypass the cache when debugging, etc 
-    cached = False
-    
-    if cached:
+    if MYSQL_CACHE_ENABLED and cached:
         mysql_func = mysql_query
     else: 
+        print("NOTE: Not using cache: " + query)
         mysql_func = mysql_query.__wrapped__
 
     mysql_res = mysql_func(query, dbcfg)    

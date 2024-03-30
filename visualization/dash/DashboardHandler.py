@@ -10,12 +10,13 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 
 import pandas as pd
 from pandas.tseries.offsets import DateOffset
-from libraries.pandas import print_full
+from libraries.pandas_helpers import print_full
 from libraries.helpers import (get_portfolio_current_value, add_asset_info)
 
 from libraries.HistoryHandlers import AssetHistoryHandler
-from libraries.HistoryHandlers import AssetHypotheticalHistoryHandler
+# from libraries.HistoryHandlers import AssetHypotheticalHistoryHandler
 from libraries.HistoryHandlers import PortfolioHistoryHandler
+from libraries.HistoryHandlers import SectorHistoryHandler
 
 class DashboardHandler:
     def __init__(self) -> None:
@@ -35,7 +36,7 @@ class DashboardHandler:
 
         ######## ASSETS ########
         ah = AssetHistoryHandler()
-
+        
         # Get and Set current portfolio value
         # NOTE: Doing this here because it's needed for assets summary, 
         # though it should be in the "PORTFOLIO" section
@@ -51,16 +52,15 @@ class DashboardHandler:
 
         # Get and set asset milestones
         self.asset_milestones = self.get_asset_milestones()
-        
+
         # Get and set asset summary
         self.assets_summary_df = self._gen_assets_summary()
-        
+  
         ####### PORTFOLIO ########
         ph = PortfolioHistoryHandler(assets_history_df = self.assets_history_df)
         
         # Get and Set portfolio history
         self.portfolio_history_df = ph.history_df
-
 
         # Index by date - can be done here since portfolio history 
         # has a single set of unique dates (no duplicates)
@@ -74,19 +74,28 @@ class DashboardHandler:
 
         # Get and set portfolio milestones
         self.portfolio_milestones = self.get_portfolio_milestones()
-        
+  
         ####### HYPOTHETICALS #######
 
         # Get and set assets hypothetical history for all exited assets
-        ahh = AssetHypotheticalHistoryHandler(
-            assets_history_df=self.assets_history_df)
-        self.assets_hypothetical_history_df = ahh.history_df
+    #     ahh = AssetHypotheticalHistoryHandler(
+    #         assets_history_df=self.assets_history_df)
+        
+    #    self.assets_hypothetical_history_df = ahh.history_df
 
-        # Split into actuals and hypotheticals, to make it possibly easier when needed
-        self.exits_actuals_history_df = self.assets_hypothetical_history_df.loc[
-            (self.assets_hypothetical_history_df['Owned'] == 'Actual')]
-        self.exits_hypotheticals_history_df = self.assets_hypothetical_history_df.loc[
-            (self.assets_hypothetical_history_df['Owned'] == 'Hypothetical')]
+    #     # Split into actuals and hypotheticals, to make it possibly easier when needed
+    #     self.exits_actuals_history_df = self.assets_hypothetical_history_df.loc[
+    #         (self.assets_hypothetical_history_df['Owned'] == 'Actual')]
+    #     self.exits_hypotheticals_history_df = self.assets_hypothetical_history_df.loc[
+    #         (self.assets_hypothetical_history_df['Owned'] == 'Hypothetical')]
+
+        ####### SECTORS #######
+        
+        # Get and set sectors values history
+        sh = SectorHistoryHandler()
+        self.sectors_history_df = sh.history_df
+        self.sectors_summary_df = self._gen_sectors_summary()
+
         
     def _gen_performance_milestones(self, history_df: pd.DataFrame, current_value: float,
                                     current_price: float=None,  
@@ -109,7 +118,7 @@ class DashboardHandler:
         
         # Run milestone calculations
         milestone_values = []
-        
+
         # Populate each milestone date with the value of the portfolio on that date
         for (interval, days) in milestones:
             offset = DateOffset(days=days)
@@ -156,6 +165,7 @@ class DashboardHandler:
         milestone_values.append(milestone_dict)
         
         milestones_df = pd.DataFrame(milestone_values)
+        
         milestones_df['Value'] = milestones_df['Value'].astype(float)
         
         # Generate % improvement from each milestone to current value
@@ -247,7 +257,7 @@ class DashboardHandler:
     def _gen_pct_change_cols(self, history_df: pd.DataFrame, 
                        column_names: list) -> pd.DataFrame:
         """
-        Given a history dataframe with a single set of unique dates + symbol, 
+        Given a history dataframe with a single set of unique dates + symbol/sector/asset_type, 
         generate a column for % change
         """
         for column_name in column_names:
@@ -259,47 +269,62 @@ class DashboardHandler:
         return history_df
     
     def _add_pct_change(self, history_df: pd.DataFrame, 
-                       column_names: list) -> pd.DataFrame:
+                       column_names: list, 
+                       id_column: str="Symbol") -> pd.DataFrame:
         """
-        Given a history dataframe with multiple symbols (and overlapping dates),), 
+        Given a history dataframe with multiple symbols/sectors (and overlapping dates), 
         generate a column for % change for each symbol
+        
         """
         master_df = pd.DataFrame()
         
-        symbols = list(history_df['Symbol'].unique())
+        ids = list(history_df[id_column].unique())
         
-        for symbol in symbols :
-            symbol_df = history_df.loc[history_df['Symbol'] == symbol]
-            symbol_df = symbol_df.sort_values(by='Date') \
-                if 'Date' in symbol_df else symbol_df.sort_index()
-            symbol_df = symbol_df.reset_index(drop=True)
-            symbol_df = self._gen_pct_change_cols(symbol_df, column_names)
-            master_df = pd.concat([master_df, symbol_df])
-
+        # Process a mini df of each symbol/sector/asset type and add to master
+        for id in ids:
+            id_df = history_df.loc[history_df[id_column] == id]
+            id_df = id_df.sort_values(by='Date') \
+                if 'Date' in id_df else id_df.sort_index()
+            id_df = id_df.reset_index(drop=True)
+            id_df = self._gen_pct_change_cols(id_df, column_names)
+            master_df = pd.concat([master_df, id_df])
 
         return master_df
     
-    def expand_history_df(self, history_df: pd.DataFrame) -> pd.DataFrame:
+    def expand_history_df(self, history_df: pd.DataFrame, 
+                          id_column: str="Symbol") -> pd.DataFrame:
         """ 
         Given a base history dataframe, containing historical quantities, prices and 
-        values for multiple symbols (each with varying dates), add in the following info: 
-            - Percent return for each period from the initial value (Price)
+        values for multiple symbols or sectors (each with varying dates), add in the following info: 
+            - Percent return for each period from the initial price (Price)
+            AND/OR
             - Percent return for each period from the initial value (Value)
-            - Info on the asset (Company or Asset Name, Sector, Asset Type)
+            AND/OR
+            - Info on the asset (Company or Asset Name, Sector, Asset Type) [Assets/Symbols only]
+            
+        "id_column" can be "Symbol" [ie assets], "Sector" or "Asset Type"
+            [IE etf, common stock, REIT]
             
         Columns added:
+            [Assets]
             ClosingPrice % Change, Value % Change
             Name, Asset Type, Sector
+            
+            [Sectors] or [Asset Types]
+            Value % Change
         """
-        column_names = []
+        assert(id_column in ['Symbol', 'Sector', 'Asset Type'])
+        
+        metric_column_names = []
         if "ClosingPrice" in history_df:
-            column_names.append("ClosingPrice")
+            metric_column_names.append("ClosingPrice")
 
         if "Value" in history_df:
-            column_names.append("Value")
+            metric_column_names.append("Value")
 
-        history_df = self._add_pct_change(history_df, column_names)
-        history_df = add_asset_info(history_df)
+        history_df= self._add_pct_change(history_df, metric_column_names, id_column)
+        if id_column == "Symbol":
+            history_df = add_asset_info(history_df)
         
         return history_df
     
@@ -434,7 +459,7 @@ class DashboardHandler:
                         'Lifetime Return', 'Dividend Yield', 'Total Dividend', ]        
         returns_cols = ['1d', '1w', '1m', '3m', '6m', '1y', '2y', '3y', '5y']
         
-        # Pivot the milestone returns for all assets into a dtaaframe with a 
+        # Pivot the milestone returns for all assets into a dataframe with a 
         # single row per unique asset, with columns for each interval
         returns_df = self.asset_milestones 
         returns_df = returns_df.pivot(
@@ -446,27 +471,64 @@ class DashboardHandler:
         assets_summary_df = pd.merge(summary_df, returns_df, on='Symbol')
         
         return assets_summary_df
+    
+    
+    def _gen_sectors_summary(self) -> pd.DataFrame:
+        """
+        Generate a summary of all sectors in the portfolio, including the 
+        following information
+            - Sector Name
+            - Cost Basis
+            - Current Market Value
+            - % of Total Portfolio
+            - Lifetime Return (Sum Cost Basis vs Sum Market Value)
+            - Avg Daily Return (Avg of all assets daily return)
+            - Avg Dividends Yield (% - Avg of all assets dividend yield)
+            - Total Dividends ($ - Sum of all assets dividends)
+            - TODO: Milestone Returns (1d, 1w, 1m, 3m, 6m, 1y, 2y, 3y, 5y)
 
-# dh = DashboardHandler()
-# assets_history_df = dh.expand_history_df(dh.portfolio_assets_history_df)
-# print_full(assets_history_df)
+        Returns:
+            sectors_summary_df: 
+        """
+        portfolio_summary_df = self.current_portfolio_summary_df
+        sectors_summary_df = pd.DataFrame()
+        
+        # For Cost Basis, Current Value, Total Dividend, get sum grouped by sector
+        sector_sum_cols = ['Cost Basis', 'Current Value', 'Total Dividend']
+        sectors_summary_df = portfolio_summary_df.groupby('Sector')[sector_sum_cols].sum()
+        sectors_summary_df = sectors_summary_df.reset_index()
 
-# assets_history_stats_df = dh.gen_historical_stats(assets_history_df)
-# print_full(assets_history_stats_df)
+        # For Dividend Yield, get mean grouped by sector
+        sector_mean_cols = ['Dividend Yield']
+        sectors_mean_df = portfolio_summary_df.groupby('Sector')[sector_mean_cols].mean()
+        sectors_mean_df = sectors_mean_df.reset_index()
+        sectors_summary_df = sectors_summary_df.merge(sectors_mean_df, on='Sector')
 
-# print_full(dh.assets_summary_df)
+        # For % of Total Portfolio, divide current value by total portfolio value
+        sectors_summary_df['% of Total Portfolio'] = \
+            sectors_summary_df['Current Value'] / self.current_portfolio_value * 100
 
-# milestones = dh.get_asset_milestones()
-# pivot = milestones.pivot(index='Symbol', columns='Interval', values='Price % Return')
+        # For Lifetime Return, get current value - cost basis / cost basis
+        sectors_summary_df['Lifetime Return'] = \
+            (sectors_summary_df['Current Value'] - sectors_summary_df['Cost Basis']) \
+                / sectors_summary_df['Cost Basis'] * 100
 
-# dh.current_portfolio_summary_df = dh.current_portfolio_summary_df[summary_cols]
-# print_full(dh.current_portfolio_summary_df)
-
-
-# return_cols = ['1d', '1w', '1m', '3m', '6m', '1y', '2y', '3y', '5y']
-# pivot = pivot[return_cols]
-# print_full(pivot)
-
-# merged_df = pd.merge(dh.current_portfolio_summary_df, pivot, on='Symbol')
-# print_full(merged_df)
-# print_full(milestones)
+        # For avg daily return, get latest daily return for each asset 
+        # from sectors_history_df        
+        latest_sectors_history_date = self.sectors_history_df['Date'].max()
+        latest_sectors_history_df = self.sectors_history_df.loc[
+            self.sectors_history_df['Date'] == latest_sectors_history_date] 
+        latest_sectors_history_df = latest_sectors_history_df.reset_index(
+            drop=True)
+        latest_sectors_history_df = latest_sectors_history_df.drop(
+            columns=['Date'])
+        sectors_summary_df = sectors_summary_df.merge(latest_sectors_history_df, 
+                                                      on='Sector', how='left')
+        
+        sectors_summary_df = sectors_summary_df.round(2)
+        
+        
+        return sectors_summary_df
+    
+    
+dh = DashboardHandler()

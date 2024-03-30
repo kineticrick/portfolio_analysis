@@ -21,6 +21,7 @@ class BaseHistoryHandler:
         
         # Retrieve history from DB
         self.history_df = self.get_history()
+        
         refresh_history = False
         if not self.history_df.empty:
             
@@ -34,7 +35,6 @@ class BaseHistoryHandler:
             # If latest history date in DB is behind most recent trading day, 
             # update history from day after latest date to today
             if latest_history_date < previous_business_date:
-                
                 self.set_history(start_date=latest_history_date + Day(1))
                 refresh_history = True
                 

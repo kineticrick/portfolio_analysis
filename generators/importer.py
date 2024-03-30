@@ -11,7 +11,7 @@ from datetime import datetime
 
 from libraries.dbcfg import *
 from libraries.sql import *
-from libraries.pandas import * 
+from libraries.pandas_helpers import * 
 
 dir_root = "/home/kineticrick/code/python/portfolio_analysis"
 
