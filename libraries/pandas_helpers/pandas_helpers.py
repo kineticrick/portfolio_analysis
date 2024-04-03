@@ -58,7 +58,10 @@ def print_full(df):
     pd.reset_option('display.width')
 
 @cache.memoize(expire=MYSQL_CACHE_TTL)
-def mysql_query(query, dbcfg):
+def mysql_query(query, dbcfg, verbose=False):
+    if verbose: 
+        print(f"Query: {query}")
+    
     with MysqlDB(dbcfg) as db:
         return db.query(query)
 
@@ -67,7 +70,6 @@ def mysql_to_df(query, columns, dbcfg, cached=False, verbose=False):
     Convert results of mysql query to a pandas dataframe
     """
     if verbose:
-        print(f"Query: {query}")
         print(f"Columns: {', '.join(columns)}")
 
     if MYSQL_CACHE_ENABLED and cached:
@@ -76,7 +78,7 @@ def mysql_to_df(query, columns, dbcfg, cached=False, verbose=False):
         print("NOTE: Not using cache: " + query)
         mysql_func = mysql_query.__wrapped__
 
-    mysql_res = mysql_func(query, dbcfg)    
+    mysql_res = mysql_func(query, dbcfg, verbose)    
     df_data = [list(tup) for tup in mysql_res]
     df = pd.DataFrame(df_data, columns=columns)
     
