@@ -10,37 +10,6 @@ from diskcache import Cache
 
 cache = Cache("cache")
 
-TDAMERITRADE_CSV_TO_DB_COL_NAMES = {
-    "Qty": "Quantity",
-    "Mkt value": "MarketValue",
-    "Cost": "CostBasis",
-    "Div yield": "DividendYield",
-}
-
-SCHWAB_CSV_VALID_COLUMNS = [
-    'Symbol',
-    'Quantity',
-    'Cost Basis',
-    'Dividend Yield',
-] 
-
-def get_brokerage_data_from_csv(csv_path: str) -> pd.DataFrame:
-    """
-    Converts the CSV file at the given path to a pandas dataframe 
-    """
-    df = pd.read_csv(csv_path)
-    
-    # Filter only columns that we need 
-    df = df[SCHWAB_CSV_VALID_COLUMNS]
-    
-    # Clean up data - remove % from dividend yield, $ from cost basis
-    df['Dividend Yield'] = df['Dividend Yield'].fillna('0')
-    df['Dividend Yield'] = df['Dividend Yield'].str.rstrip('%')
-    df['Cost Basis'] = df['Cost Basis'].str.lstrip('$')
-    df['Cost Basis'] = df['Cost Basis'].str.replace(',', '')
-
-    return df
-
 def print_full(df):
     """
     Prints the entirety of a PD dataframe, not just the shortened version
@@ -75,7 +44,7 @@ def mysql_to_df(query, columns, dbcfg, cached=False, verbose=False):
     if MYSQL_CACHE_ENABLED and cached:
         mysql_func = mysql_query
     else: 
-        print("NOTE: Not using cache: " + query)
+        # print("NOTE: Not using cache: " + query)
         mysql_func = mysql_query.__wrapped__
 
     mysql_res = mysql_func(query, dbcfg, verbose)    

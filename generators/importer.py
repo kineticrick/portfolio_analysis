@@ -36,7 +36,7 @@ def main():
     all_transactions = (wallmine_transactions + 
                         tdameritrade_transactions + 
                         schwab_transactions)
-    all_transactions = validate_transactions(all_transactions)
+    all_transactions = validate_transactions(all_transactions, entities)
     all_transactions = cleanup_transactions(all_transactions)
     
     # Create tables

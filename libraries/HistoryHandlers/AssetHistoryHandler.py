@@ -84,3 +84,6 @@ class AssetHistoryHandler(BaseHistoryHandler):
         query = read_assets_history_query + symbols_str
         history_df = mysql_to_df(query, read_assets_history_columns, dbcfg, cached=True)
         return history_df
+    
+# ah = AssetHistoryHandler()
+# print_full(ah.get_history())

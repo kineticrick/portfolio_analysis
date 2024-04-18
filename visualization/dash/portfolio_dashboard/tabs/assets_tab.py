@@ -1,4 +1,4 @@
-from dash import callback, dcc, dash_table, Input, Output 
+from dash import callback, dcc, dash_table, Input, Output, html
 import plotly.express as px
 import pandas as pd
 
@@ -8,43 +8,86 @@ from libraries.pandas_helpers import print_full
 
 import dash_bootstrap_components as dbc
 
+# Get assets table and prepare to be displayed
+assets_table_df = DASH_HANDLER.assets_summary_df
+assets_table_df['id'] = assets_table_df['Symbol']
+assets_table_df = assets_table_df.set_index('id')
+assets_table_df = assets_table_df.rename(columns={'Lifetime Return': 'Lifetime'})  
+columns=[{"name": i, "id": i} for i in assets_table_df.columns]
+
+# Generate mapping to allow for persistent checkbox selection across 
+# resorting of table 
+row_symbol_mapping = {row: symbol 
+                      for row, symbol 
+                      in enumerate(assets_table_df['Symbol'])}
+
 @callback(
-    Output('assets-table', 'columns'),
-    Output('assets-table', 'data'),
+    Output('assets-table-container', 'children'),
+    Input('assets-table', 'selected_rows'),
     Input('assets-interval-dropdown', 'value')
 )
-def update_assets_table(interval): 
-    # Get basis for data table/spreadsheet for assets
-    assets_table_df = DASH_HANDLER.assets_summary_df
-    
-    # Add id column to dataframe, to be used in row selection 
-    if 'id' not in assets_table_df.columns:
-        assets_table_df['id'] = assets_table_df['Symbol']
-        assets_table_df = assets_table_df.set_index('id')
-    
-    # Rename Lifetime column to just the interval name 
-    assets_table_df = assets_table_df.rename(
-        columns={'Lifetime Return': 'Lifetime'})  
-
-    columns=[{"name": i, "id": i} for i in assets_table_df.columns]
+def update_assets_table(selected_rows, interval): 
+    # Using current mapping, and based on incoming selected rows 
+    # index numbers, get the corresponding symbols
+    # NOTE: Not using selected_row_ids because it is highly 
+    # unreliable and non-deterministic
+    global assets_table_df, row_symbol_mapping
+    if selected_rows:
+        selected_symbols = [row_symbol_mapping[row] for row in selected_rows]
 
     # Sort by interval given (ie "3m" = sort all assets 
     # by best returns over 3 months)
     assets_table_df = assets_table_df.sort_values(by=interval, ascending=False)
     
-    return columns, assets_table_df.to_dict('records')
+    # Rebuild row:symbol mapping, since the ordering of the symbols has now changed
+    row_symbol_mapping = {row: symbol 
+                          for row, symbol 
+                          in enumerate(assets_table_df['Symbol'])}
+    
+    # Based on "selected_symbols" above, now get the corresponding 
+    # row index to indicate which rows should be selected
+    if selected_rows:
+        selected_rows = [row for row, symbol in row_symbol_mapping.items() 
+                         if symbol in selected_symbols]
+    else: 
+        selected_rows = []
+
+    data_table = dash_table.DataTable(
+        id='assets-table',
+        columns = columns,
+        data=assets_table_df.to_dict('records'),
+        style_header={
+            'whiteSpace': 'normal',
+            'height': 'auto',
+        },
+        style_cell={
+            'textAlign': 'center',
+            'fontSize': '13px',
+        },
+        fixed_rows={'headers': True},
+        sort_action='native',
+        sort_mode='multi',
+        row_selectable='multi',
+        selected_rows=selected_rows,
+    )
+
+    return data_table
+
+
 
 @callback(
     Output('assets-history-graph', 'figure'),
-    Input('assets-table', 'selected_row_ids'),
+    Input('assets-table', 'selected_rows'),
     Input('assets-interval-dropdown', 'value'))
-def update_assets_hist_graph(selected_row_ids, interval):
+def update_assets_hist_graph(selected_rows, interval):
     # Generate base dataframe containing all history for all assets
     assets_history_df = DASH_HANDLER.portfolio_assets_history_df
 
-    if selected_row_ids:
+    # Filter data based on the symbols selected via checkbox in the data table
+    if selected_rows:
+        selected_symbols = [row_symbol_mapping[row] for row in selected_rows]
         assets_history_df = assets_history_df[
-            assets_history_df['Symbol'].isin(selected_row_ids)]
+            assets_history_df['Symbol'].isin(selected_symbols)]
 
     # If 'Lifetime' is the interval, then we dont need to filter by date
     # Otherwise, reduce data to only include data from the start date
@@ -79,23 +122,25 @@ assets_tab = dbc.Container(
         dbc.Row([
             dbc.Col(
                 dbc.Card(
-                    dash_table.DataTable(
-                        id='assets-table',
-                        # columns=[{"name": i, "id": i}
-                        #     for i in assets_table_df.columns],
-                        # data=assets_table_df.to_dict('records'),
-                        style_header={
-                            'whiteSpace': 'normal',
-                            'height': 'auto',
-                        }, 
-                        style_cell={
-                            'textAlign': 'center',
-                            'fontSize': '13px',
-                        },
-                        fixed_rows={'headers': True},
-                        sort_action='native',
-                        sort_mode='multi',
-                        row_selectable='multi',
+                    html.Div(
+                        id='assets-table-container',
+                        children=[
+                            dash_table.DataTable(
+                                id='assets-table',
+                                style_header={
+                                    'whiteSpace': 'normal',
+                                    'height': 'auto',
+                                }, 
+                                style_cell={
+                                    'textAlign': 'center',
+                                    'fontSize': '13px',
+                                },
+                                fixed_rows={'headers': True},
+                                sort_action='native',
+                                sort_mode='multi',
+                                row_selectable='multi',
+                            ),
+                        ],
                     ),
                 ),
                 width={'size': 12}

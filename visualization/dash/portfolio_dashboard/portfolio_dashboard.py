@@ -11,9 +11,16 @@ from dash import Dash
 from visualization.dash.portfolio_dashboard.tabs import (
                                                          portfolio_tab, 
                                                          assets_tab,
-                                                        #  hypotheticals_tab,
+                                                         hypotheticals_tab,
                                                          sectors_tab
                                                          )
+
+from libraries.globals import MYSQL_CACHE_ENABLED, MYSQL_CACHE_TTL
+
+if MYSQL_CACHE_ENABLED:
+    print(f"Cache enabled with TTL of {MYSQL_CACHE_TTL} seconds")
+else:
+    print("Cache disabled") 
 
 print("Loading Portfolio Dashboard...")
 app = Dash(external_stylesheets=[dbc.themes.BOOTSTRAP])
@@ -29,8 +36,8 @@ app.layout = \
             dbc.Tab(label='Sectors Dashboard', tab_id='sectors-dash-tab', 
                     children=sectors_tab),
         #     Removed hypotheticals_tab from tabs
-        #     dbc.Tab(label='Hypotheticals Dashboard', tab_id='hypotheticals-dash-tab', 
-        #             children=hypotheticals_tab),
+            dbc.Tab(label='Hypotheticals Dashboard', tab_id='hypotheticals-dash-tab', 
+                    children=hypotheticals_tab),
         ], 
         id='tabs', 
         active_tab='assets-dash-tab'
