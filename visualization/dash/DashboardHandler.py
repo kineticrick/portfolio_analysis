@@ -14,7 +14,7 @@ from libraries.pandas_helpers import print_full
 from libraries.helpers import (get_portfolio_current_value, add_asset_info)
 
 from libraries.HistoryHandlers import AssetHistoryHandler
-# from libraries.HistoryHandlers import AssetHypotheticalHistoryHandler
+from libraries.HistoryHandlers import AssetHypotheticalHistoryHandler
 from libraries.HistoryHandlers import PortfolioHistoryHandler
 from libraries.HistoryHandlers import SectorHistoryHandler
 
@@ -78,16 +78,16 @@ class DashboardHandler:
         ####### HYPOTHETICALS #######
 
         # Get and set assets hypothetical history for all exited assets
-    #     ahh = AssetHypotheticalHistoryHandler(
-    #         assets_history_df=self.assets_history_df)
+        ahh = AssetHypotheticalHistoryHandler(
+            assets_history_df=self.assets_history_df)
         
-    #    self.assets_hypothetical_history_df = ahh.history_df
+        self.assets_hypothetical_history_df = ahh.history_df
 
     #     # Split into actuals and hypotheticals, to make it possibly easier when needed
-    #     self.exits_actuals_history_df = self.assets_hypothetical_history_df.loc[
-    #         (self.assets_hypothetical_history_df['Owned'] == 'Actual')]
-    #     self.exits_hypotheticals_history_df = self.assets_hypothetical_history_df.loc[
-    #         (self.assets_hypothetical_history_df['Owned'] == 'Hypothetical')]
+        self.exits_actuals_history_df = self.assets_hypothetical_history_df.loc[
+            (self.assets_hypothetical_history_df['Owned'] == 'Actual')]
+        self.exits_hypotheticals_history_df = self.assets_hypothetical_history_df.loc[
+            (self.assets_hypothetical_history_df['Owned'] == 'Hypothetical')]
 
         ####### SECTORS #######
         
@@ -218,7 +218,7 @@ class DashboardHandler:
             pd.set_option('mode.chained_assignment',None)
             history_df['Date'] = pd.to_datetime(history_df['Date'])
             history_df = history_df.set_index('Date')
-            
+
             # Generate milestones for each asset
             asset_milestones_df = \
                 self._gen_performance_milestones(history_df, current_value, 

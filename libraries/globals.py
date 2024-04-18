@@ -58,3 +58,10 @@ TRADES_DICT_KEYS = ['symbol', 'date', 'action',
 DIVIDENDS_DICT_KEYS = ['symbol', 'date', 'action', 'dividend']
 
 IMPORTER_VERBOSE = True
+
+SCHWAB_CSV_VALID_COLUMNS = [
+    'Symbol',
+    'Quantity',
+    'Cost Basis',
+    'Dividend Yield',
+] 

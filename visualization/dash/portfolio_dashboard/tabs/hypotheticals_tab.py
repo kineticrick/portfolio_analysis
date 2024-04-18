@@ -21,6 +21,7 @@ sectors = normalized_hypo_df['Sector'].unique().tolist()
 sectors = [{'label': x, 'value': x} for x in sectors]
 sectors = sorted(sectors, key=lambda x: x['label'])
 
+asset_hypo_df = DASH_HANDLER.assets_hypothetical_history_df
 asset_hypo_stats_df = DASH_HANDLER.gen_historical_stats(asset_hypo_df, hypotheticals=True)
 asset_hypo_stats_df = asset_hypo_stats_df[['Name', 'Symbol', 'Sector', 'Hypo Ret.(Exit/Current)%']]
 
