@@ -37,6 +37,7 @@ SYMBOL_BLACKLIST = [
 ]
 
 MYSQL_CACHE_ENABLED = True
+MYSQL_CACHE_HISTORY_TAG = 'historycaches'
 MYSQL_CACHE_TTL = 60*60*1
 
 ### Generators ###

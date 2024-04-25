@@ -27,11 +27,12 @@ row_symbol_mapping = {row: symbol
     Input('assets-interval-dropdown', 'value')
 )
 def update_assets_table(selected_rows, interval): 
+    global assets_table_df, row_symbol_mapping
+
     # Using current mapping, and based on incoming selected rows 
     # index numbers, get the corresponding symbols
     # NOTE: Not using selected_row_ids because it is highly 
     # unreliable and non-deterministic
-    global assets_table_df, row_symbol_mapping
     if selected_rows:
         selected_symbols = [row_symbol_mapping[row] for row in selected_rows]
 
@@ -110,6 +111,7 @@ def update_assets_hist_graph(selected_rows, interval):
         assets_history_df,
         x=assets_history_df['Date'], 
         y=assets_history_df['ClosingPrice % Change'],
+        hover_data={'Value': ':$,.2f', 'ClosingPrice % Change': ':.2f%'},
         color=assets_history_df['Symbol'],
         line_dash=assets_history_df['Sector'],
     )

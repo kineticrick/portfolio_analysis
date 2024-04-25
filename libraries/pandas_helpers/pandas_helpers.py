@@ -4,11 +4,8 @@ import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '../..'))
 
 import pandas as pd
-from libraries.db import MysqlDB
-from libraries.globals import MYSQL_CACHE_ENABLED, MYSQL_CACHE_TTL
-from diskcache import Cache
-
-cache = Cache("cache")
+from libraries.globals import MYSQL_CACHE_ENABLED
+from libraries.db import mysql_query
 
 def print_full(df):
     """
@@ -25,14 +22,6 @@ def print_full(df):
     pd.reset_option('display.max_rows')
     pd.reset_option('display.max_columns')
     pd.reset_option('display.width')
-
-@cache.memoize(expire=MYSQL_CACHE_TTL)
-def mysql_query(query, dbcfg, verbose=False):
-    if verbose: 
-        print(f"Query: {query}")
-    
-    with MysqlDB(dbcfg) as db:
-        return db.query(query)
 
 def mysql_to_df(query, columns, dbcfg, cached=False, verbose=False): 
     """
@@ -55,3 +44,5 @@ def mysql_to_df(query, columns, dbcfg, cached=False, verbose=False):
     df = df.apply(pd.to_numeric, errors='ignore')
     
     return df
+    
+    
