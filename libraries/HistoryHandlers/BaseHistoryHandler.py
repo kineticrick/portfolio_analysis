@@ -7,6 +7,8 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../..'))
 
 from pandas.tseries.offsets import Day, BDay
 from libraries.db import dbcfg, MysqlDB
+from libraries.db.mysql_helpers import mysql_cache_evict
+from libraries.globals import MYSQL_CACHE_HISTORY_TAG
 
 class BaseHistoryHandler:
     # Placeholder for SQL to create history table in DB
@@ -36,11 +38,15 @@ class BaseHistoryHandler:
             # update history from day after latest date to today
             if latest_history_date < previous_business_date:
                 self.set_history(start_date=latest_history_date + Day(1))
+                # Clear cache to ensure updated history is retrieved
+                mysql_cache_evict(MYSQL_CACHE_HISTORY_TAG)
                 refresh_history = True
                 
         # If dataframe is empty, update history from start of time to today
         else:
             self.set_history()
+            # Clear cache to ensure updated history is retrieved
+            mysql_cache_evict(MYSQL_CACHE_HISTORY_TAG)
             refresh_history = True
             
         if refresh_history:
