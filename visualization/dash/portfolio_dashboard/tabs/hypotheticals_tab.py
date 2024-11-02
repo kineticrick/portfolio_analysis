@@ -27,7 +27,7 @@ asset_hypo_stats_df = asset_hypo_stats_df[['Name', 'Symbol', 'Sector', 'Hypo Ret
 
 @callback(
     Output('asset-select-dropdown', 'options'),
-    Input('sector-select-dropdown', 'value'))
+    Input('hypo-sector-select-dropdown', 'value'))
 def update_asset_dropdown_options(sectors):    
     if not sectors:
         df = normalized_hypo_df  
@@ -50,7 +50,7 @@ def update_asset_dropdown_options(sectors):
     
 @callback(
     Output('asset-select-dropdown', 'value'),
-    Input('sector-select-dropdown', 'value'),
+    Input('hypo-sector-select-dropdown', 'value'),
     Input('asset-select-dropdown', 'options'))
 def set_asset_dropdown_values(sectors, available_options):
     if not sectors: 
@@ -60,7 +60,7 @@ def set_asset_dropdown_values(sectors, available_options):
 
 @callback(
     Output('hypothetical-normalized-history-graph', 'figure'),
-    Input('sector-select-dropdown', 'value'),
+    Input('hypo-sector-select-dropdown', 'value'),
     Input('asset-select-dropdown', 'value'))
 def update_normalized_hypo_graph(sectors, assets):
     if not sectors and not assets:
@@ -85,7 +85,7 @@ hypotheticals_tab = dbc.Container(
             dbc.Col(
                 dcc.Dropdown(
                     options=sectors,
-                    id='sector-select-dropdown',
+                    id='hypo-sector-select-dropdown',
                     placeholder='Select sector(s)',
                     multi=True,
                 ),
@@ -98,7 +98,8 @@ hypotheticals_tab = dbc.Container(
                     multi=True,
                 ),
                 width={'offset': 1, 'size': 3}
-            ),],
+            ),
+            ],
             justify='start' 
         ),
         

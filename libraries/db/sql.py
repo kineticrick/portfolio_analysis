@@ -245,3 +245,26 @@ insert_update_sectors_history_sql = \
     
 read_sectors_history_query = "SELECT * FROM sectors_history"
 read_sectors_history_columns = ['Date', 'Sector', 'AvgPercentReturn']
+
+# AssetTypeHistoryHelper - asset_types_history table
+create_asset_types_history_table_sql = \
+    ("CREATE TABLE IF NOT EXISTS asset_types_history ("
+    "date DATE NOT NULL, "
+    "asset_type VARCHAR(40) NOT NULL, "
+    "avg_percent_return DECIMAL(13, 2) NOT NULL, "
+    "PRIMARY KEY (date, asset_type))")
+    
+insert_ignore_asset_types_history_sql = \
+    ("INSERT IGNORE INTO asset_types_history"
+     "(date, asset_type, avg_percent_return) "
+     "VALUES ('{date}','{asset_type}', '{avg_percent_return}')")
+    
+insert_update_asset_types_history_sql = \
+    ("INSERT INTO asset_types_history"
+     "(date, asset_type, avg_percent_return) "
+     "VALUES ('{date}','{asset_type}', '{avg_percent_return}') "
+     "ON DUPLICATE KEY UPDATE "
+     "date='{date}', asset_type='{asset_type}', avg_percent_return='{avg_percent_return}'")
+    
+read_asset_types_history_query = "SELECT * FROM asset_types_history"
+read_asset_types_history_columns = ['Date', 'Asset Type', 'AvgPercentReturn']

@@ -36,11 +36,21 @@ class BaseHistoryHandler:
 
             # If latest history date in DB is behind most recent trading day, 
             # update history from day after latest date to today
-            if latest_history_date < previous_business_date:
-                self.set_history(start_date=latest_history_date + Day(1))
-                # Clear cache to ensure updated history is retrieved
-                mysql_cache_evict(MYSQL_CACHE_HISTORY_TAG)
-                refresh_history = True
+            
+            # OR if yesterday was a weekend day and latest 
+            # history date is behind that, then also update history 
+            # to fill in weekend gaps 
+            
+            yesterday = today - Day(1)
+            yesterday = yesterday.date()
+            yesterday_weekend = yesterday.weekday() >= 5
+            
+            if latest_history_date < previous_business_date or \
+                (yesterday_weekend and latest_history_date < yesterday):
+                    self.set_history(start_date=latest_history_date + Day(1))
+                    # Clear cache to ensure updated history is retrieved
+                    mysql_cache_evict(MYSQL_CACHE_HISTORY_TAG)
+                    refresh_history = True
                 
         # If dataframe is empty, update history from start of time to today
         else:
