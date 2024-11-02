@@ -22,7 +22,8 @@ from visualization.dash.portfolio_dashboard.tabs import (
                                                          portfolio_tab, 
                                                          assets_tab,
                                                          hypotheticals_tab,
-                                                         sectors_tab
+                                                         sectors_tab,
+                                                         asset_types_tab
                                                          )
 
 
@@ -34,6 +35,8 @@ app.layout = \
                     children=portfolio_tab),
             dbc.Tab(label='Sectors', tab_id='sectors-dash-tab', 
                     children=sectors_tab),
+            dbc.Tab(label='Asset Types', tab_id='asset-types-dash-tab', 
+                    children=asset_types_tab),
             dbc.Tab(label='Assets', tab_id='assets-dash-tab', 
                     children=assets_tab),
         #     Removed hypotheticals_tab from tabs

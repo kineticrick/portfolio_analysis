@@ -15,6 +15,14 @@ assets_table_df = assets_table_df.set_index('id')
 assets_table_df = assets_table_df.rename(columns={'Lifetime Return': 'Lifetime'})  
 columns=[{"name": i, "id": i} for i in assets_table_df.columns]
 
+sectors = assets_table_df['Sector'].unique().tolist()
+sectors = [{'label': x, 'value': x} for x in sectors]
+sectors = sorted(sectors, key=lambda x: x['label'])
+
+asset_types = assets_table_df['Asset Type'].unique().tolist()
+asset_types = [{'label': x, 'value': x} for x in asset_types]
+asset_types = sorted(asset_types, key=lambda x: x['label'])
+
 # Generate mapping to allow for persistent checkbox selection across 
 # resorting of table 
 row_symbol_mapping = {row: symbol 
@@ -23,18 +31,37 @@ row_symbol_mapping = {row: symbol
 
 @callback(
     Output('assets-table-container', 'children'),
+    Input('sector-select-dropdown', 'value'),
+    Input('asset-type-select-dropdown', 'value'),
     Input('assets-table', 'selected_rows'),
     Input('assets-interval-dropdown', 'value')
 )
-def update_assets_table(selected_rows, interval): 
+def update_assets_table(sectors, asset_types, selected_rows, interval): 
     global assets_table_df, row_symbol_mapping
+
+    # Get list of symbols of assets that are in the 
+    # selected sectors from assets_table_df
+    symbols_by_sector = \
+        (assets_table_df[assets_table_df['Sector'].isin(sectors)]['Symbol']
+        if sectors else [])
+    
+    # Get list of symbols of assets that are of the 
+    # selected asset types from assets_table_df
+    symbols_by_asset_type = \
+        (assets_table_df[assets_table_df['Asset Type'].isin(asset_types)]['Symbol']
+        if asset_types else [])
 
     # Using current mapping, and based on incoming selected rows 
     # index numbers, get the corresponding symbols
     # NOTE: Not using selected_row_ids because it is highly 
     # unreliable and non-deterministic
-    if selected_rows:
-        selected_symbols = [row_symbol_mapping[row] for row in selected_rows]
+    selected_symbols = \
+        ([row_symbol_mapping[row] for row in selected_rows] 
+         if selected_rows else [])
+
+    final_selected_symbols = list(set(selected_symbols) | 
+                                  set(symbols_by_sector) |
+                                  set(symbols_by_asset_type))
 
     # Sort by interval given (ie "3m" = sort all assets 
     # by best returns over 3 months)
@@ -47,9 +74,10 @@ def update_assets_table(selected_rows, interval):
     
     # Based on "selected_symbols" above, now get the corresponding 
     # row index to indicate which rows should be selected
-    if selected_rows:
+    # if selected_rows:
+    if final_selected_symbols:
         selected_rows = [row for row, symbol in row_symbol_mapping.items() 
-                         if symbol in selected_symbols]
+                         if symbol in final_selected_symbols]
     else: 
         selected_rows = []
 
@@ -152,11 +180,32 @@ assets_tab = dbc.Container(
         dbc.Row([
             dbc.Col(
                 dcc.Dropdown(
-                    # options=[{'label': i, 'value': i} for i in INTERVALS],
                     id='assets-interval-dropdown',
                     options=INTERVALS,
                     value=DEFAULT_INTERVAL,
                     placeholder='Select interval',
+                ),
+                width={'offset': 1, 'size': 3}
+            ),
+        ],),
+        dbc.Row([
+            dbc.Col(
+                dcc.Dropdown(
+                    options=sectors,
+                    id='sector-select-dropdown',
+                    placeholder='Select sector(s)',
+                    multi=True,
+                ),
+                width={'offset': 1, 'size': 3}
+            ),
+        ],),
+        dbc.Row([
+            dbc.Col(
+                dcc.Dropdown(
+                    options=asset_types,
+                    id='asset-type-select-dropdown',
+                    placeholder='Select asset type(s)',
+                    multi=True,
                 ),
                 width={'offset': 1, 'size': 3}
             ),

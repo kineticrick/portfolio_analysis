@@ -43,6 +43,7 @@ class AssetHistoryHandler(BaseHistoryHandler):
             gen_assets_historical_value(self.symbols, cadence='daily', 
                                         start_date=start_date, 
                                         include_exit_date=False)
+
         column_conversion_map = {
             'date': 'Date',
             'symbol': 'Symbol',

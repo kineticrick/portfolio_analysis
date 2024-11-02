@@ -60,4 +60,9 @@ from .sql import (create_trades_table_sql,
                   insert_ignore_sectors_history_sql,
                   insert_update_sectors_history_sql,
                   read_sectors_history_query,
-                  read_sectors_history_columns,)
+                  read_sectors_history_columns,
+                  create_assets_history_table_sql,
+                  insert_ignore_assets_history_sql,
+                  insert_update_assets_history_sql,
+                  read_assets_history_query,
+                  read_assets_history_columns,)

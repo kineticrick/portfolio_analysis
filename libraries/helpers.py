@@ -444,15 +444,17 @@ def gen_assets_historical_value(symbols: list=[],
     
     return merged_df
 
-def gen_aggregated_historical_value(symbols: list=[],
-                                    dimension: str='Sector', 
+def gen_aggregated_historical_value(dimension: str, 
+                                    symbols: list=[],
                                     cadence: str='daily',
                                     start_date: str=None) -> pd.DataFrame:
     """
     Generate historical value of portfolio, aggregated by a given dimension
-    Aggregation is done by taking the average of daily percent return values of 
+    Aggregation is done by taking the average of [cadence] percent return values of 
     all member assets within the sector
-    Dimension can be 'Sector' or 'Asset Type'
+    (IE: AAPL return over its lifetime, from purchase to today, 
+    averaged with MSFT's, GOOG's, etc)
+    Dimension can be 'sector' or 'asset_type'
     
     Returns: aggregated_df -> 
     Date, [Dimension], AvgPercentReturn
@@ -497,7 +499,33 @@ def get_portfolio_summary() -> pd.DataFrame:
                                        cached=True)
     
     return portfolio_summary_df
+
+def add_asset_info(asset_df: pd.DataFrame, truncate=True) -> pd.DataFrame:
+    """
+    Given a dataframe of assets, add additional information* about each asset
+    Info = Company Name, Sector, Asset Type (Common Stock, ETF, REIT)
     
+    If truncate is True, all strings will be truncated to 20 characters
+    
+    Returns: asset_df 
+        {Original DF}, Company Name, Sector, Asset Type
+    """
+    
+    assert('Symbol' in asset_df.columns)
+    
+    asset_info_df = mysql_to_df(
+        read_entities_table_query, read_entities_table_columns, 
+        dbcfg, cached=True)
+        
+    # Truncates long strings to 20 characters, for better display
+    if truncate:
+        for col in asset_info_df.select_dtypes(include='object'):
+            asset_info_df[col] = asset_info_df[col].str.slice(0, 25)
+        
+    asset_df = asset_df.merge(asset_info_df, on='Symbol', how='left')
+    
+    return asset_df
+
 # Cache for 1 hour, since it takes a bit of time to get current prices for 
 # all assets in portfolio
 # @cache.memoize(expire=60*60*1)    
@@ -538,32 +566,11 @@ def get_portfolio_current_value() -> tuple[pd.DataFrame, float]:
     
     return (summary_df, total_value)
 
-def add_asset_info(asset_df: pd.DataFrame, truncate=True) -> pd.DataFrame:
-    """
-    Given a dataframe of assets, add additional information* about each asset
-    Info = Company Name, Sector, Asset Type (Common Stock, ETF, REIT)
-    
-    If truncate is True, all strings will be truncated to 20 characters
-    
-    Returns: asset_df 
-        {Original DF}, Company Name, Sector, Asset Type
-    """
-    
-    assert('Symbol' in asset_df.columns)
-    
-    asset_info_df = mysql_to_df(
-        read_entities_table_query, read_entities_table_columns, 
-        dbcfg, cached=True)
-        
-    # Truncates long strings to 20 characters, for better display
-    if truncate:
-        for col in asset_info_df.select_dtypes(include='object'):
-            asset_info_df[col] = asset_info_df[col].str.slice(0, 25)
-        
-    asset_df = asset_df.merge(asset_info_df, on='Symbol', how='left')
-    
-    return asset_df
 
 # TODO: BUILDIN ERROR HANDLING
 # Symbols that don't exist
 # Symbols that don't have any data
+
+# symbols = ['MSFT']
+# out = gen_assets_historical_value(symbols, start_date='2021-01-01')
+# print_full(out)

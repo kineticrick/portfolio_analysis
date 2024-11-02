@@ -1,5 +1,6 @@
 from .BaseHistoryHandler import BaseHistoryHandler
 from .AssetHistoryHandler import AssetHistoryHandler
 from .AssetHypotheticalHistoryHandler import AssetHypotheticalHistoryHandler
+from .AssetTypeHistoryHandler import AssetTypeHistoryHandler
 from .PortfolioHistoryHandler import PortfolioHistoryHandler
 from .SectorHistoryHandler import SectorHistoryHandler
