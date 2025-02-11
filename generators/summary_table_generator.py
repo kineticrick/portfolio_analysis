@@ -32,20 +32,18 @@ def main():
     args = process_args()
     
     master_log_df = build_master_log()
+    
     summary_df = process_master_log(master_log_df)
 
     brokerage_df = get_brokerage_data_from_csv(args.brokerage_data_file)
-    
-    print_full(brokerage_df)
 
     errors = validate_summary_table(summary_df, brokerage_df)
     
     summary_df = integrate_brokerage_data(summary_df, brokerage_df)
-    
+
     # Sort summary_df by symbol
     summary_df = summary_df.sort_values(by=['Symbol'], ignore_index=True)
     
-    print_full(summary_df) 
     print()
     print()
     

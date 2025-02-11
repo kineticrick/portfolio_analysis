@@ -7,6 +7,7 @@ create_trades_table_sql = \
     "num_shares INT, "
     "price_per_share DECIMAL(13, 2), "
     "total_price DECIMAL(13, 2) NOT NULL, "
+    "account_type VARCHAR(100), "
     "PRIMARY KEY (date, symbol, action, total_price))")
 
 create_dividends_table_sql = \
@@ -14,6 +15,7 @@ create_dividends_table_sql = \
     "date DATE NOT NULL, "
     "symbol VARCHAR(4) NOT NULL, "
     "dividend DECIMAL(13, 2) NOT NULL, "
+    "account_type VARCHAR(100), "
     "PRIMARY KEY (date, symbol, dividend))")
 
 create_splits_table_sql = \
@@ -42,14 +44,14 @@ create_acquisitions_table_sql = \
     
 insert_buysell_tx_sql = \
     ("INSERT IGNORE INTO trades"
-     "(date, symbol, action, num_shares, price_per_share, total_price) "
+     "(date, symbol, action, num_shares, price_per_share, total_price, account_type) "
      "VALUES ('{date}','{symbol}','{action}',{num_shares},"
-             "{price_per_share},{total_price})")
+             "{price_per_share},{total_price}, '{account_type}')")
     
 insert_dividend_tx_sql = \
     ("INSERT IGNORE INTO dividends"
-     "(date, symbol, dividend) "
-     "VALUES ('{date}','{symbol}','{dividend}')")
+     "(date, symbol, dividend, account_type) "
+     "VALUES ('{date}','{symbol}','{dividend}', '{account_type}')")
 
 insert_entities_sql = \
     ("INSERT IGNORE INTO entities"
@@ -83,19 +85,20 @@ create_summary_table_sql = \
     "last_purchase_date DATE NOT NULL, "
     "total_dividend DECIMAL(13, 2), "
     "dividend_yield DECIMAL(3, 2), "
-    "PRIMARY KEY (symbol, name))")
+    "account_type VARCHAR(100), "
+    "PRIMARY KEY (symbol, name, account_type))")
 
 insert_summary_sql = \
     ("INSERT INTO summary"
      "(symbol, name, current_shares, cost_basis, "
-     "first_purchase_date, last_purchase_date, total_dividend, dividend_yield) "
+     "first_purchase_date, last_purchase_date, total_dividend, dividend_yield, account_type) "
      "VALUES ('{symbol}','{name}','{current_shares}','{cost_basis}',"
              "'{first_purchase_date}','{last_purchase_date}',"
-             "'{total_dividend}', '{dividend_yield}') " 
+             "'{total_dividend}', '{dividend_yield}', '{account_type}') " 
      "ON DUPLICATE KEY UPDATE current_shares='{current_shares}'," 
      "cost_basis='{cost_basis}',first_purchase_date='{first_purchase_date}',"
      "last_purchase_date='{last_purchase_date}',total_dividend='{total_dividend}',"
-     "dividend_yield='{dividend_yield}'")
+     "dividend_yield='{dividend_yield}', account_type='{account_type}'")
 
 stocks_with_sales_query = \
     ("SELECT t1.symbol, t1.bought, t2.sold, t1.bought-t2.sold as remaining FROM "
@@ -121,16 +124,16 @@ read_entities_table_columns = ['Name', 'Symbol', 'Asset Type', 'Sector']
 
 ### Master Log Summary Method ###
 master_log_buys_query = \
-    "SELECT date, symbol, action, num_shares, price_per_share FROM trades WHERE action='buy'"
-master_log_buys_columns = ['Date', 'Symbol', 'Action', 'Quantity', 'PricePerShare']
+    "SELECT date, symbol, action, num_shares, price_per_share, account_type FROM trades WHERE action='buy'"
+master_log_buys_columns = ['Date', 'Symbol', 'Action', 'Quantity', 'PricePerShare', 'AccountType']
 
 master_log_sells_query = \
-    "SELECT date, symbol, action, num_shares FROM trades WHERE action='sell'"
-master_log_sells_columns = ['Date', 'Symbol', 'Action', 'Quantity']
+    "SELECT date, symbol, action, num_shares, account_type FROM trades WHERE action='sell'"
+master_log_sells_columns = ['Date', 'Symbol', 'Action', 'Quantity', 'AccountType']
 
 master_log_dividends_query = \
-    "SELECT date, symbol, 'dividend' as 'action', dividend FROM dividends"
-master_log_dividends_columns = ['Date', 'Symbol', 'Action', 'Dividend']
+    "SELECT date, symbol, 'dividend' as 'action', dividend, account_type FROM dividends"
+master_log_dividends_columns = ['Date', 'Symbol', 'Action', 'Dividend', 'AccountType']
                            
 master_log_splits_query = \
     "SELECT distribution_date as 'date', symbol, 'split' as 'action', multiplier FROM splits"
