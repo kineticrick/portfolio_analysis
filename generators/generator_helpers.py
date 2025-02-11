@@ -11,7 +11,7 @@ from libraries.db.sql import (drop_summary_table_sql, create_summary_table_sql,
                               insert_summary_sql, asset_name_query, 
                               asset_name_columns)
 from libraries.globals import (TRADES_DICT_KEYS, DIVIDENDS_DICT_KEYS, 
-                               SCHWAB_CSV_VALID_COLUMNS)
+                               SCHWAB_CSV_VALID_COLUMNS, ACCOUNT_TYPES)
 from libraries.pandas_helpers import mysql_to_df
 
 
@@ -83,6 +83,12 @@ def process_csvs(object_type: str, csv_files: str, brokerage_name: str="") -> li
                                     object_dict['num_shares'] = row['quantity']
                                     object_dict['price_per_share'] = row['price'].strip('$')
                                     object_dict['total_price'] = row['amount'].strip('-').strip('$')
+                            
+                                # Set account type to retirement if csv_file is a 
+                                # dump from a rollover account
+                                if "rollover" in csv_file.lower():
+                                    object_dict['account_type'] = "Retirement"
+                                
                             case 'tdameritrade':
                                 object_dict['date'] = datetime.strptime(row.get('date'), "%m/%d/%Y").strftime("%Y-%m-%d")
                                 description = row['description'].lower()
@@ -112,6 +118,9 @@ def process_csvs(object_type: str, csv_files: str, brokerage_name: str="") -> li
                                 object_dict['action'] not in ('buy', 'sell', 'dividend'): 
                             continue
                         object_dict['symbol'] = object_dict['symbol'].upper()
+                        if object_dict.get('account_type') is None:
+                            object_dict['account_type'] = "Discretionary"
+                        
                 all_objects.append(object_dict)
     return all_objects
 
@@ -142,6 +151,9 @@ def validate_transactions(transactions: list[dict], entities: list[dict]) -> lis
         for tx in transactions: 
             # Actions are one of 3 valid types
             assert tx['action'] in ['buy', 'sell', 'dividend']
+            
+            # Account type is one of 2 valid types
+            assert tx['account_type'] in ACCOUNT_TYPES
             
             # All keys are present and only accepted keys are present
             if tx['action'] in ("buy", "sell"):
@@ -197,11 +209,19 @@ def process_master_log(master_log_df: pd.DataFrame) -> pd.DataFrame:
         pd.DataFrame: Summary table of positions
     """
     # Setup temporary dicts to hold running counts and states of each asset
-    share_count = defaultdict(int)
-    total_dividend = defaultdict(Decimal)
-    first_date = defaultdict(str)
-    last_date = defaultdict(str)
     
+    # For each account type (discretionary, retirement), create a separate nested dict
+    # to hold running counts and states of each asset
+    # THIS IS A MESSY WAY TO DO THIS, I KNOW, BUT IT WORKS
+    account_type_dicts = {}
+    for account_type in ACCOUNT_TYPES:
+        account_type_dicts[account_type] = {
+            'share_count': defaultdict(int),
+            'total_dividend': defaultdict(Decimal),
+            'first_date': defaultdict(str),
+            'last_date': defaultdict(str)
+        }
+        
     for _, event in master_log_df.iterrows():
         date = event['Date']
         symbol = event['Symbol']
@@ -211,52 +231,72 @@ def process_master_log(master_log_df: pd.DataFrame) -> pd.DataFrame:
         multiplier = event['Multiplier']
         acquirer = event['Acquirer']
         target = event['Target']
+        account_type = event['AccountType']
         
+        if account_type in ACCOUNT_TYPES:
+            acct_type_dict = account_type_dicts[account_type]
+
         match action:
             case 'buy': 
                 # If first buy, set first date to date of buy
-                if share_count[symbol] == 0:
-                    first_date[symbol] = date
+                if acct_type_dict['share_count'][symbol] == 0:
+                    acct_type_dict['first_date'][symbol] = date
                 
                 # Increase quantity by # of shares bought and 
                 # set last date to date of buy
-                share_count[symbol] += quantity
-                last_date[symbol] = date
+                acct_type_dict['share_count'][symbol] += quantity
+                acct_type_dict['last_date'][symbol] = date
 
             case 'sell':
                 # Reduce quantity by # of shares sold
-                share_count[symbol] -= quantity
+                acct_type_dict['share_count'][symbol] -= quantity
             
             case 'dividend':
                 # Increase dividend total for asset
-                total_dividend[symbol] += Decimal(dividend)
+                acct_type_dict['total_dividend'][symbol] += Decimal(dividend)
                 
             case 'split':
                 # Multiply share count by split multiplier
-                share_count[symbol] *= multiplier
+                # This is universal for all account types - a stock splits regardless of 
+                # the account its in - so apply it to all
+                for acct_type in ACCOUNT_TYPES:
+                    acct_type_dict = account_type_dicts[acct_type]
+                    if symbol not in acct_type_dict['share_count']:
+                        continue
+                    acct_type_dict['share_count'][symbol] *= multiplier
 
             case 'acquisition-target':
-                # Determine converted amount of shares for target, add to acquirer's amount
-                multiplied_shares = int(share_count[symbol] * multiplier)
-                share_count[acquirer] += multiplied_shares
+                # This is universal for all account types - a stocks acquisition behavior
+                # is the same regardless of the account its in - so apply it to all
+                for acct_type in ACCOUNT_TYPES:
+                    acct_type_dict = account_type_dicts[acct_type]
+                    if symbol not in acct_type_dict['share_count']:
+                        continue
+                    # Determine converted amount of shares for target, add to acquirer's amount
+                    multiplied_shares = int(acct_type_dict['share_count'][symbol] * multiplier)
+                    acct_type_dict['share_count'][acquirer] += multiplied_shares
+
+                    # Remove shares from target company 
+                    acct_type_dict['share_count'][symbol] = 0   
                 
-                # Remove shares from target company 
-                share_count[symbol] = 0   
-    
+                
     # Convert dicts to list of dicts for dataframe        
     summary_list = []
-    for symbol, quantity in share_count.items():
-        if quantity == 0: 
-            continue
-        asset_summary = {
-            'Symbol': symbol,
-            'Quantity': quantity,
-            'Total Dividend': total_dividend[symbol],
-            'First Date Purchased': first_date[symbol],
-            'Last Date Purchased': last_date[symbol],
-        }
-        summary_list.append(asset_summary)
-        
+    for account_type in ACCOUNT_TYPES:
+        acct_type_dict = account_type_dicts[account_type]
+        for symbol, quantity in acct_type_dict['share_count'].items():
+            if quantity == 0: 
+                continue
+            asset_summary = {
+                'Symbol': symbol,
+                'Quantity': quantity,
+                'Total Dividend': acct_type_dict['total_dividend'][symbol],
+                'First Date Purchased': acct_type_dict['first_date'][symbol],
+                'Last Date Purchased': acct_type_dict['last_date'][symbol],
+                'Account Type': account_type
+            }
+            summary_list.append(asset_summary)
+            
     return pd.DataFrame(summary_list)
 
 def get_brokerage_data_from_csv(csv_path: str) -> pd.DataFrame:
@@ -278,12 +318,6 @@ def get_brokerage_data_from_csv(csv_path: str) -> pd.DataFrame:
     df['Quantity'] = df['Quantity'].astype(int)
     df['Cost Basis'] = df['Cost Basis'].astype(float)
     
-    # Because we're pulling data from multiple brokerage accounts, and they can hold
-    # the same asset, we need to group by symbol and sum up the quantities
-    df = df.groupby('Symbol').agg({'Quantity': 'sum', 
-                                   'Cost Basis': 'sum', 
-                                   'Dividend Yield': 'first'}).reset_index()
-    
     return df
 
 def validate_summary_table(summary_df: pd.DataFrame, 
@@ -303,11 +337,18 @@ def validate_summary_table(summary_df: pd.DataFrame,
             error_msg = f"Brokerage asset {symbol} doesn't appear in summary data"
             errors['Missing Assets'].append(error_msg)
             continue
-              
+    
+    #Because its not possible to differentiate between the same symbol in two different accounts, 
+    # We need to collapse the quantities of shares in all accounts into a single number, 
+    # to compare to the brokerage report (note that we collapse them all above in the brokerage data)          
+    # summary_agg_df = summary_df.groupby('Symbol').agg({'Quantity': 'sum'}).reset_index()
+    # summary_agg_df_dict = summary_agg_df.set_index('Symbol').to_dict()['Quantity']
     
     for _, summary_asset in summary_df.iterrows():
         # Make sure that custom-derived symbol exists in brokerage data
         symbol = summary_asset['Symbol']
+        quantity = summary_asset['Quantity']
+        
         brokerage_asset_info = brokerage_df.loc[brokerage_df['Symbol'] == symbol]
         
         if brokerage_asset_info.empty:
@@ -315,12 +356,11 @@ def validate_summary_table(summary_df: pd.DataFrame,
             errors['Missing Assets'].append(error_msg)
             continue
         
-        # Make sure that summary number of shares matches brokerage data
-        quantity = summary_asset['Quantity']
-        brokerage_shares = brokerage_asset_info['Quantity'].values[0].round()
-        
-        if quantity != brokerage_shares:
-            error_msg = f"Number of shares for {symbol} doesn't match" + \
+        # Retrieve number of shares from brokerage data for all accounts
+        brokerage_shares = brokerage_asset_info['Quantity'].tolist()
+
+        if quantity not in brokerage_shares:
+            error_msg = f"Number of shares for {symbol} doesn't match " + \
                 f"brokerage data. Summary:{quantity} != Brokerage:{brokerage_shares}."
             errors['Shares quantity mismatch'].append(error_msg)
     
@@ -333,7 +373,10 @@ def integrate_brokerage_data(summary_df: pd.DataFrame,
     """
     for _, summary_asset in summary_df.iterrows():
         symbol = summary_asset['Symbol']
-        brokerage_asset_info = brokerage_df.loc[brokerage_df['Symbol'] == symbol]
+        quantity = summary_asset['Quantity']
+        
+        brokerage_asset_info = brokerage_df.loc[(brokerage_df['Symbol'] == symbol) & \
+                                                (brokerage_df['Quantity'] == quantity)]
         
         # Skip if brokerage data doesn't have info for symbol 
         # Already flagged in validate_summary_table
@@ -342,11 +385,13 @@ def integrate_brokerage_data(summary_df: pd.DataFrame,
         
         # Merge brokerage Cost Basis into summary  
         cost_basis = brokerage_asset_info['Cost Basis'].values[0]
-        summary_df.loc[summary_df['Symbol'] == symbol, 'Cost Basis'] = cost_basis
+        summary_df.loc[
+            (summary_df['Symbol'] == symbol) & (summary_df['Quantity'] == quantity), 'Cost Basis'] = cost_basis
 
         # Merge brokerage dividend yield into summary  
         dividend_yield = brokerage_asset_info['Dividend Yield'].values[0].rstrip('%')
-        summary_df.loc[summary_df['Symbol'] == symbol, 'Dividend Yield'] = \
+        summary_df.loc[
+            (summary_df['Symbol'] == symbol) & (summary_df['Quantity'] == quantity), 'Dividend Yield'] = \
             dividend_yield
             
     return summary_df
@@ -379,7 +424,7 @@ def write_db(summary_df: pd.DataFrame, verbose: bool) -> None:
             insertion_dict['last_purchase_date'] = asset['Last Date Purchased']
             insertion_dict['total_dividend'] = asset['Total Dividend']
             insertion_dict['dividend_yield'] = asset['Dividend Yield']
-            
+            insertion_dict['account_type'] = asset['Account Type']
             sql = insert_summary_sql.format(**insertion_dict)
             if verbose: 
                 print(sql)

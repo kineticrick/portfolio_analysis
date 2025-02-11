@@ -56,9 +56,9 @@ FILEDIRS = {'entities': os.path.join(ROOT_DIR, 'files/entities'),
 
 TRADES_DICT_KEYS = ['symbol', 'date', 'action',
                     'num_shares', 'price_per_share', 
-                    'total_price']
+                    'total_price', 'account_type']
 
-DIVIDENDS_DICT_KEYS = ['symbol', 'date', 'action', 'dividend']
+DIVIDENDS_DICT_KEYS = ['symbol', 'date', 'action', 'dividend', 'account_type']
 
 IMPORTER_VERBOSE = True
 
@@ -68,3 +68,5 @@ SCHWAB_CSV_VALID_COLUMNS = [
     'Cost Basis',
     'Dividend Yield',
 ] 
+
+ACCOUNT_TYPES = ['Discretionary', 'Retirement']
