@@ -36,6 +36,7 @@ SYMBOL_BLACKLIST = [
     'ATVI',
     'PEAK', # Changed to "DOC"
     'SPWR',
+     # 'LEN', #Returns as 'delisted' though doesnt seem to be
 ]
 
 MYSQL_CACHE_ENABLED = False

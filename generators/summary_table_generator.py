@@ -44,6 +44,7 @@ def main():
     # Sort summary_df by symbol
     summary_df = summary_df.sort_values(by=['Symbol'], ignore_index=True)
     
+    print_full(summary_df)
     print()
     print()
     
