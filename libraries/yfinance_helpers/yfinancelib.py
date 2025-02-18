@@ -112,13 +112,17 @@ def get_historical_prices(tickers: list, start: str=None,
     for symbol, data in prices.items(): 
         # Need to convert data back to a dataframe
         data = pd.DataFrame.from_dict(data, orient='index')
+        
+        if data.empty:
+            print(f"WARNING: No historical price data (YFinance) found for {symbol}. Ignoring...")
+            continue
+        
         data.index.name = 'Date'
         
         data['Symbol'] = symbol
         data = data.reset_index()
         data['Date'] = pd.to_datetime(data['Date']).dt.date
-        
-                
+
         if cleaned_up:
             # Keep only closing price column 
             data = data.rename(columns={'Close': 'ClosingPrice'})

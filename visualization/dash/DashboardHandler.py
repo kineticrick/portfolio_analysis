@@ -221,6 +221,10 @@ class DashboardHandler:
                 self.current_portfolio_summary_df['Symbol'] == symbol]['Current Value'].values[0]
             history_df = self.assets_history_df.loc[self.assets_history_df['Symbol'] == symbol]
             
+            if history_df.empty:
+                print(f"WARNING: No asset history found (local DB) for {symbol}. Ignoring...")
+                continue
+            
             # Index date for specific asset, since it's now a unique set of dates
             pd.set_option('mode.chained_assignment',None)
             history_df['Date'] = pd.to_datetime(history_df['Date'])

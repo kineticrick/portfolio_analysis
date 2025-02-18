@@ -150,7 +150,7 @@ asset_name_columns = ['Symbol', 'Name']
 read_summary_table_query = "SELECT * FROM summary"
 read_summary_table_columns = ['Symbol', 'Name', 'Quantity', 'Cost Basis',
                               'First Purchase Date', 'Last Purchase Date', 
-                              'Total Dividend', 'Dividend Yield']
+                              'Total Dividend', 'Dividend Yield', 'Account Type']
                               
                               
 # HistoryHelper - assets_history table
