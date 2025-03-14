@@ -92,8 +92,8 @@ class TestHelpers(unittest.TestCase):
         self.assertTrue('AvgPercentReturn' in sector_result.columns)
         
         # Test asset type aggregation
-        asset_type_result = gen_aggregated_historical_value('Asset Type', symbols=symbols)
-        self.assertTrue('Asset Type' in asset_type_result.columns)
+        asset_type_result = gen_aggregated_historical_value('AssetType', symbols=symbols)
+        self.assertTrue('AssetType' in asset_type_result.columns)
         
         # Test with specific symbols
         # symbols = ['AAPL', 'MSFT']

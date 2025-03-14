@@ -4,3 +4,4 @@ from .AssetHypotheticalHistoryHandler import AssetHypotheticalHistoryHandler
 from .AssetTypeHistoryHandler import AssetTypeHistoryHandler
 from .PortfolioHistoryHandler import PortfolioHistoryHandler
 from .SectorHistoryHandler import SectorHistoryHandler
+from .AccountTypeHistoryHandler import AccountTypeHistoryHandler

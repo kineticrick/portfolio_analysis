@@ -2,3 +2,4 @@ __pycache__
 files
 cache/
 libraries/db/pwd.py
+.vscode/

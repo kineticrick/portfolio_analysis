@@ -27,14 +27,15 @@ from libraries.db.sql import (master_log_buys_query,
                               read_summary_table_columns)
 from libraries.yfinance_helpers import get_historical_prices, get_current_price
 from libraries.globals import (NON_QUANTITY_ASSET_EVENTS, ASSET_EVENTS, 
-                            MASTER_LOG_COLUMNS, CADENCE_MAP)
+                            MASTER_LOG_COLUMNS, CADENCE_MAP, 
+                            ACCOUNT_TYPES)
 from pandas.tseries.offsets import BDay
 
 from diskcache import Cache
 
 cache = Cache('cache')
 
-def build_master_log(symbols: list=[]) -> pd.DataFrame:
+def  build_master_log(symbols: list=[]) -> pd.DataFrame:
     """
     For each ASSET_EVENT, retrieve log of each event as a dataframe, then 
     merge each into a sorted master log
@@ -70,8 +71,10 @@ def build_master_log(symbols: list=[]) -> pd.DataFrame:
                 query += ' OR acquirer IN ' + symbols_clause
 
         columns = globals()[f"master_log_{event}s_columns"]
-
+        
         event_log_df = mysql_to_df(query, columns, dbcfg, cached=True)
+        import warnings
+        warnings.simplefilter(action='ignore', category=FutureWarning)
         master_log_df = pd.concat([master_log_df, event_log_df], ignore_index=True)
 
     # Acquisition events are stored in the master log as two separate events,
@@ -113,6 +116,15 @@ def build_master_log(symbols: list=[]) -> pd.DataFrame:
     master_log_df = master_log_df.sort_values(by=sort_clause, 
                                               ascending=True,
                                               ignore_index=True)
+    
+    # For actions which are agnostic of a specific brokerage account 
+    # (ie splits or acquisitions change the quantity of shares regardless
+    # of what other actions have occurred in any specific account. A 2x split affects 
+    # ALL accounts)  
+    
+    master_log_df.loc[
+        master_log_df['Action'].isin(['split', 'acquisition-target', 'acquisition-acquirer']), 
+        'AccountType'] = 'Agnostic'
 
     return master_log_df
 
@@ -128,12 +140,14 @@ def gen_hist_quantities(asset_event_log_df: pd.DataFrame,
     If False, then only dates with a quantity change will be included.
     
     Returns: quantities_df
-        Date, Symbol, quantity (net)
-        2019-01-01, MSFT, 100
-        2019-06-12, MSFT, 50
+        Date, Symbol, quantity (net), AccountType
+        2019-01-01, MSFT, 100, Discretionary
+        2019-06-12, MSFT, 50, Discretionary
     """
-    #TODO: Ensure only one symbol is passed in
-    assert(len(asset_event_log_df['Symbol'].unique()) == 1)
+    #TODO: Ensure only one symbol, account type pair is passed in
+    # assert(len(asset_event_log_df['Symbol'].unique()) == 1)
+
+    # assert(len(asset_event_log_df[['Symbol', 'AccountType']].drop_duplicates()) == 1)
     
     # Remove non-quantity events, like dividend 
     # ('~' is the bitwise NOT operator)
@@ -160,9 +174,11 @@ def gen_hist_quantities(asset_event_log_df: pd.DataFrame,
     for _, event in asset_event_log_df.iterrows():
         date = event['Date']
         symbol = event['Symbol']
+        account_type = event['AccountType']
 
         all_events[date]['Date'] = date
         all_events[date]['Symbol'] = symbol
+        all_events[date]['AccountType'] = account_type
         
         action = event['Action']
         quantity = event['Quantity']
@@ -226,7 +242,6 @@ def gen_hist_quantities(asset_event_log_df: pd.DataFrame,
                 # Get the quantity of the acquisition target asset on the date of the acquisition
                 target = [event['Target']]
                 day_before = date - BDay(1)
-
                 target_prior_quantity_df = \
                     get_asset_quantity_by_date(target, day_before.strftime('%Y-%m-%d'))
 
@@ -241,7 +256,7 @@ def gen_hist_quantities(asset_event_log_df: pd.DataFrame,
     
         all_events[date]['Quantity'] = total_quantity
         all_events[date]['CostBasis'] = cost_basis
-
+        all_events[date]['AccountType'] = account_type
     all_events = list(all_events.values())        
     quantities_df = pd.DataFrame(all_events)
     
@@ -272,10 +287,12 @@ def gen_hist_quantities(asset_event_log_df: pd.DataFrame,
 
         # Fill in missing values with previous value
         # IE Set quantity to last/current, as of that date
-        quantities_df['Quantity'] = quantities_df['Quantity'].fillna(method='ffill')
-        quantities_df['Symbol'] = quantities_df['Symbol'].fillna(method='ffill')
+        quantities_df['Quantity'] = quantities_df['Quantity'].ffill()
+        quantities_df['Symbol'] = quantities_df['Symbol'].ffill()
         quantities_df['CostBasis'] = \
-            quantities_df['CostBasis'].fillna(method='ffill')
+            quantities_df['CostBasis'].ffill()
+        quantities_df['AccountType'] = \
+            quantities_df['AccountType'].ffill()
         
         # Downsample to specified cadence
         # quantities_df = quantities_df.asfreq(BUSINESS_CADENCE_MAP[cadence])
@@ -304,19 +321,25 @@ def gen_hist_quantities_mult(assets_event_log_df: pd.DataFrame,
     2020-08-22, DIS, buy, 20
     """
     
-    # Get list of unique symbols
-    symbols = assets_event_log_df['Symbol'].unique()
+    # Get list of unique [Symbol, AccountType] pairs
+    symbols = assets_event_log_df[['Symbol', 'AccountType']].drop_duplicates()
+
+    symbols = symbols[symbols['AccountType'].isin(['Discretionary', 'Retirement'])]
 
     quantities_df = pd.DataFrame()
     # Get historical quantities for each symbol
-    for symbol in symbols:
+    for _, row in symbols.iterrows():
+        symbol = row['Symbol']
+        account_type = row['AccountType']
         symbol_event_log_df = assets_event_log_df[
-            assets_event_log_df['Symbol'] == symbol]
+            (assets_event_log_df['Symbol'] == symbol) & 
+            ((assets_event_log_df['AccountType'] == account_type) | 
+             (assets_event_log_df['AccountType'] == 'Agnostic'))]
         symbol_quantities_df = gen_hist_quantities(symbol_event_log_df, 
                                                    cadence=cadence,
                                                    expand_chronology=expand_chronology)
-        quantities_df = pd.concat([quantities_df, symbol_quantities_df], 
-                                  )
+        quantities_df = pd.concat([quantities_df, symbol_quantities_df])
+
     return quantities_df
 
 def get_asset_quantity_by_date(symbols: list, date: str) -> pd.DataFrame:
@@ -367,7 +390,7 @@ def gen_assets_historical_value(symbols: list=[],
     # Get historical share quantities of assets
     quantities_df = gen_hist_quantities_mult(assets_event_log_df, 
                                               cadence=cadence)
-
+    
     if start_date is not None:
         start_date = pd.to_datetime(start_date)
         
@@ -454,7 +477,7 @@ def gen_aggregated_historical_value(dimension: str,
     all member assets within the sector
     (IE: AAPL return over its lifetime, from purchase to today, 
     averaged with MSFT's, GOOG's, etc)
-    Dimension can be 'sector' or 'asset_type'
+    Dimension can be 'sector' or 'asset_type' or 'account_type'
     
     Returns: aggregated_df -> 
     Date, [Dimension], AvgPercentReturn
@@ -462,7 +485,7 @@ def gen_aggregated_historical_value(dimension: str,
     2016-02-18  Aerospace + Defense    3581.38
     """
     assert(type(symbols) == list)
-    assert(dimension in ['Sector', 'Asset Type'])
+    assert(dimension in ['Sector', 'AssetType', 'AccountType'])
     assert(cadence in CADENCE_MAP.keys()) 
     
     # Get all assets' historical values
@@ -471,7 +494,7 @@ def gen_aggregated_historical_value(dimension: str,
                                                     start_date=start_date, 
                                                     include_exit_date=False)
     
-    # Add in Sector, Asset Type, etc columns 
+    # Add in Sector, AssetType, etc columns 
     expanded_df = add_asset_info(assets_history_df, truncate=False)
     
     # Aggregate by dimension and date, then take average of daily percent 
@@ -503,12 +526,12 @@ def get_portfolio_summary() -> pd.DataFrame:
 def add_asset_info(asset_df: pd.DataFrame, truncate=True) -> pd.DataFrame:
     """
     Given a dataframe of assets, add additional information* about each asset
-    Info = Company Name, Sector, Asset Type (Common Stock, ETF, REIT)
+    Info = Company Name, Sector, AssetType (Common Stock, ETF, REIT)
     
     If truncate is True, all strings will be truncated to 20 characters
     
     Returns: asset_df 
-        {Original DF}, Company Name, Sector, Asset Type
+        {Original DF}, Company Name, Sector, AssetType
     """
     
     assert('Symbol' in asset_df.columns)
@@ -570,7 +593,3 @@ def get_portfolio_current_value() -> tuple[pd.DataFrame, float]:
 # TODO: BUILDIN ERROR HANDLING
 # Symbols that don't exist
 # Symbols that don't have any data
-
-# symbols = ['MSFT']
-# out = gen_assets_historical_value(symbols, start_date='2021-01-01')
-# print_full(out)

@@ -15,13 +15,20 @@ assets_table_df = assets_table_df.set_index('id')
 assets_table_df = assets_table_df.rename(columns={'Lifetime Return': 'Lifetime'})  
 columns=[{"name": i, "id": i} for i in assets_table_df.columns]
 
+# Retrieve list of unique sectors to be used in dropdown
 sectors = assets_table_df['Sector'].unique().tolist()
 sectors = [{'label': x, 'value': x} for x in sectors]
 sectors = sorted(sectors, key=lambda x: x['label'])
 
-asset_types = assets_table_df['Asset Type'].unique().tolist()
+# Retrieve list of unique asset types to be used in dropdown
+asset_types = assets_table_df['AssetType'].unique().tolist()
 asset_types = [{'label': x, 'value': x} for x in asset_types]
 asset_types = sorted(asset_types, key=lambda x: x['label'])
+
+# Retrieve list of unique account types to be used in dropdown
+account_types = assets_table_df['AccountType'].unique().tolist()
+account_types = [{'label': x, 'value': x} for x in account_types]
+account_types = sorted(account_types, key=lambda x: x['label'])
 
 # Generate mapping to allow for persistent checkbox selection across 
 # resorting of table 
@@ -33,10 +40,11 @@ row_symbol_mapping = {row: symbol
     Output('assets-table-container', 'children'),
     Input('sector-select-dropdown', 'value'),
     Input('asset-type-select-dropdown', 'value'),
+    Input('account-type-select-dropdown', 'value'),
     Input('assets-table', 'selected_rows'),
     Input('assets-interval-dropdown', 'value')
 )
-def update_assets_table(sectors, asset_types, selected_rows, interval): 
+def update_assets_table(sectors, asset_types, account_types, selected_rows, interval): 
     global assets_table_df, row_symbol_mapping
 
     # Get list of symbols of assets that are in the 
@@ -48,8 +56,14 @@ def update_assets_table(sectors, asset_types, selected_rows, interval):
     # Get list of symbols of assets that are of the 
     # selected asset types from assets_table_df
     symbols_by_asset_type = \
-        (assets_table_df[assets_table_df['Asset Type'].isin(asset_types)]['Symbol']
+        (assets_table_df[assets_table_df['AssetType'].isin(asset_types)]['Symbol']
         if asset_types else [])
+    
+    # Get list of symbols of assets that are of the 
+    # selected account types from assets_table_df
+    symbols_by_account_type = \
+        (assets_table_df[assets_table_df['AccountType'].isin(account_types)]['Symbol']
+        if account_types else [])
 
     # Using current mapping, and based on incoming selected rows 
     # index numbers, get the corresponding symbols
@@ -61,7 +75,8 @@ def update_assets_table(sectors, asset_types, selected_rows, interval):
 
     final_selected_symbols = list(set(selected_symbols) | 
                                   set(symbols_by_sector) |
-                                  set(symbols_by_asset_type))
+                                  set(symbols_by_asset_type) |
+                                  set(symbols_by_account_type))
 
     # Sort by interval given (ie "3m" = sort all assets 
     # by best returns over 3 months)
@@ -74,7 +89,6 @@ def update_assets_table(sectors, asset_types, selected_rows, interval):
     
     # Based on "selected_symbols" above, now get the corresponding 
     # row index to indicate which rows should be selected
-    # if selected_rows:
     if final_selected_symbols:
         selected_rows = [row for row, symbol in row_symbol_mapping.items() 
                          if symbol in final_selected_symbols]
@@ -205,6 +219,17 @@ assets_tab = dbc.Container(
                     options=asset_types,
                     id='asset-type-select-dropdown',
                     placeholder='Select asset type(s)',
+                    multi=True,
+                ),
+                width={'offset': 1, 'size': 3}
+            ),
+        ],),
+        dbc.Row([
+            dbc.Col(
+                dcc.Dropdown(
+                    options=account_types,
+                    id='account-type-select-dropdown',
+                    placeholder='Select account type(s)',
                     multi=True,
                 ),
                 width={'offset': 1, 'size': 3}

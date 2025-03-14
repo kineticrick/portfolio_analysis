@@ -36,12 +36,12 @@ class AssetTypeHistoryHandler(BaseHistoryHandler):
         """
         # Retrieve daily value data for all asset_types
         asset_types_historical_data_df = \
-            gen_aggregated_historical_value(dimension='Asset Type',
+            gen_aggregated_historical_value(dimension='AssetType',
                                             start_date=start_date)
             
         column_conversion_map = {
             'date': 'Date',
-            'asset_type': 'Asset Type',
+            'asset_type': 'AssetType',
             'avg_percent_return': 'AvgPercentReturn',
         }
         
@@ -67,7 +67,7 @@ class AssetTypeHistoryHandler(BaseHistoryHandler):
         
         Returns:
             history_df (pd.DataFrame): 
-                Date, Asset Type, AvgPercentReturn
+                Date, AssetType, AvgPercentReturn
         """
         history_df = mysql_to_df(read_asset_types_history_query, 
                                  read_asset_types_history_columns, dbcfg, cached=True)
