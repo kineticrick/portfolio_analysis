@@ -40,9 +40,13 @@ def mysql_to_df(query, columns, dbcfg, cached=False, verbose=False):
     df_data = [list(tup) for tup in mysql_res]
     df = pd.DataFrame(df_data, columns=columns)
     
-    # Cast all numerical columns to float
-    df = df.apply(pd.to_numeric, errors='ignore')
-    
+    # Convert each numerical columns to float
+    for col in df.columns:
+        try:
+            df[col] = pd.to_numeric(df[col])
+        except:
+            pass
+
     return df
     
     

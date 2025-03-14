@@ -18,6 +18,7 @@ from libraries.HistoryHandlers import AssetHypotheticalHistoryHandler
 from libraries.HistoryHandlers import AssetTypeHistoryHandler
 from libraries.HistoryHandlers import PortfolioHistoryHandler
 from libraries.HistoryHandlers import SectorHistoryHandler
+from libraries.HistoryHandlers import AccountTypeHistoryHandler
 
 class DashboardHandler:
     def __init__(self) -> None:
@@ -103,6 +104,13 @@ class DashboardHandler:
         ath = AssetTypeHistoryHandler()
         self.asset_types_history_df = ath.history_df
         self.asset_types_summary_df = self._gen_asset_types_summary()
+        
+        ####### ACCOUNT TYPES #######
+        
+        # Get and set account types values history
+        acth = AccountTypeHistoryHandler()
+        self.account_types_history_df = acth.history_df
+        self.account_types_summary_df = self._gen_account_types_summary()
         
     def _gen_performance_milestones(self, history_df: pd.DataFrame, current_value: float,
                                     current_price: float=None,  
@@ -311,20 +319,20 @@ class DashboardHandler:
             AND/OR
             - Percent return for each period from the initial value (Value)
             AND/OR
-            - Info on the asset (Company or Asset Name, Sector, Asset Type) [Assets/Symbols only]
+            - Info on the asset (Company or Asset Name, Sector, AssetType) [Assets/Symbols only]
             
-        "id_column" can be "Symbol" [ie assets], "Sector" or "Asset Type"
+        "id_column" can be "Symbol" [ie assets], "Sector" or "AssetType"
             [IE etf, common stock, REIT]
             
         Columns added:
             [Assets]
             ClosingPrice % Change, Value % Change
-            Name, Asset Type, Sector
+            Name, AssetType, Sector
             
-            [Sectors] or [Asset Types]
+            [Sectors] or [AssetTypes]
             Value % Change
         """
-        assert(id_column in ['Symbol', 'Sector', 'Asset Type'])
+        assert(id_column in ['Symbol', 'Sector', 'AssetType'])
         
         metric_column_names = []
         if "ClosingPrice" in history_df:
@@ -464,7 +472,7 @@ class DashboardHandler:
         Builds a master summary of all assets in the portfolio, including all attributes
         listed in summary_cols and return_cols below
         """
-        summary_cols = ['Symbol', 'Name', 'Sector','Asset Type', 'Quantity',
+        summary_cols = ['Symbol', 'Name', 'Sector','AssetType', 'AccountType', 'Quantity',
                         'First Purchase Date', 'Last Purchase Date', 'Cost Basis',
                         'Current Price', 'Current Value', '% Total Portfolio' , 
                         'Lifetime Return', 'Dividend Yield', 'Total Dividend', ]        
@@ -565,16 +573,16 @@ class DashboardHandler:
         # For Cost Basis, Current Value, Total Dividend, get sum grouped by asset_type
         asset_type_sum_cols = ['Cost Basis', 'Current Value', 'Total Dividend']
         asset_types_summary_df = \
-            portfolio_summary_df.groupby('Asset Type')[asset_type_sum_cols].sum()
+            portfolio_summary_df.groupby('AssetType')[asset_type_sum_cols].sum()
         asset_types_summary_df = asset_types_summary_df.reset_index()
 
         # For Dividend Yield, get mean grouped by asset_type
         asset_type_mean_cols = ['Dividend Yield']
         asset_types_mean_df = \
-            portfolio_summary_df.groupby('Asset Type')[asset_type_mean_cols].mean()
+            portfolio_summary_df.groupby('AssetType')[asset_type_mean_cols].mean()
         asset_types_mean_df = asset_types_mean_df.reset_index()
         asset_types_summary_df = \
-            asset_types_summary_df.merge(asset_types_mean_df, on='Asset Type')
+            asset_types_summary_df.merge(asset_types_mean_df, on='AssetType')
 
         # For % of Total Portfolio, divide current value by total portfolio value
         asset_types_summary_df['% of Total Portfolio'] = \
@@ -596,8 +604,68 @@ class DashboardHandler:
             columns=['Date'])
         asset_types_summary_df = \
             asset_types_summary_df.merge(latest_asset_types_history_df, 
-                                         on='Asset Type', how='left')
+                                         on='AssetType', how='left')
         
         asset_types_summary_df = asset_types_summary_df.round(2)
         
         return asset_types_summary_df
+    
+    def _gen_account_types_summary(self) -> pd.DataFrame:
+        """
+        Generate a summary of all account types in the portfolio, including the 
+        following information
+            - Account Type Name
+            - Cost Basis
+            - Current Market Value
+            - % of Total Portfolio
+            - Lifetime Return (Sum Cost Basis vs Sum Market Value)
+            - Avg Daily Return (Avg of all assets daily return)
+            - Avg Dividends Yield (% - Avg of all assets dividend yield)
+            - Total Dividends ($ - Sum of all assets dividends)
+            - TODO: Milestone Returns (1d, 1w, 1m, 3m, 6m, 1y, 2y, 3y, 5y)
+
+        Returns:
+            account_types_summary_df: 
+        """
+        portfolio_summary_df = self.current_portfolio_summary_df
+        account_types_summary_df = pd.DataFrame()
+        
+        # For Cost Basis, Current Value, Total Dividend, get sum grouped by account_type
+        account_type_sum_cols = ['Cost Basis', 'Current Value', 'Total Dividend']
+        account_types_summary_df = \
+            portfolio_summary_df.groupby('AccountType')[account_type_sum_cols].sum()
+        account_types_summary_df = account_types_summary_df.reset_index()
+
+        # For Dividend Yield, get mean grouped by account_type
+        account_type_mean_cols = ['Dividend Yield']
+        account_types_mean_df = \
+            portfolio_summary_df.groupby('AccountType')[account_type_mean_cols].mean()
+        account_types_mean_df = account_types_mean_df.reset_index()
+        account_types_summary_df = \
+            account_types_summary_df.merge(account_types_mean_df, on='AccountType')
+
+        # For % of Total Portfolio, divide current value by total portfolio value
+        account_types_summary_df['% of Total Portfolio'] = \
+            account_types_summary_df['Current Value'] / self.current_portfolio_value * 100
+
+        # For Lifetime Return, get current value - cost basis / cost basis
+        account_types_summary_df['Lifetime Return'] = \
+            (account_types_summary_df['Current Value'] - account_types_summary_df['Cost Basis']) \
+                / account_types_summary_df['Cost Basis'] * 100
+
+        # For avg daily return, get latest daily return for each asset 
+        # from account_types_history_df        
+        latest_account_types_history_date = self.account_types_history_df['Date'].max()
+        latest_account_types_history_df = self.account_types_history_df.loc[
+            self.account_types_history_df['Date'] == latest_account_types_history_date] 
+        latest_account_types_history_df = latest_account_types_history_df.reset_index(
+            drop=True)
+        latest_account_types_history_df = latest_account_types_history_df.drop(
+            columns=['Date'])
+        account_types_summary_df = \
+            account_types_summary_df.merge(latest_account_types_history_df, 
+                                         on='AccountType', how='left')
+        
+        account_types_summary_df = account_types_summary_df.round(2)
+        
+        return account_types_summary_df

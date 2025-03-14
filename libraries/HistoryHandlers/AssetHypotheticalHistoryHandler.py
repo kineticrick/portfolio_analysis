@@ -157,7 +157,6 @@ class AssetHypotheticalHistoryHandler(BaseHistoryHandler):
         # Only retrieve prices for symbols which are active and 
         # actually in need of updating
         symbols = list(start_dates_dict.keys())
-        
         # Retrieve historical prices for all symbols in need
         prices_df = get_historical_prices(symbols,
                                           start=first_date,

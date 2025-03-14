@@ -120,7 +120,7 @@ acquisitions_query = "SELECT * FROM acquisitions"
 acquisitions_columns = ['Date', 'Symbol', 'Acquirer', 'Conversion_Ratio']
 
 read_entities_table_query = "SELECT * FROM entities"
-read_entities_table_columns = ['Name', 'Symbol', 'Asset Type', 'Sector']
+read_entities_table_columns = ['Name', 'Symbol', 'AssetType', 'Sector']
 
 ### Master Log Summary Method ###
 master_log_buys_query = \
@@ -150,9 +150,8 @@ asset_name_columns = ['Symbol', 'Name']
 read_summary_table_query = "SELECT * FROM summary"
 read_summary_table_columns = ['Symbol', 'Name', 'Quantity', 'Cost Basis',
                               'First Purchase Date', 'Last Purchase Date', 
-                              'Total Dividend', 'Dividend Yield', 'Account Type']
-                              
-                              
+                              'Total Dividend', 'Dividend Yield', 'AccountType']
+                                                          
 # HistoryHelper - assets_history table
 create_assets_history_table_sql = \
     ("CREATE TABLE IF NOT EXISTS assets_history ("
@@ -270,4 +269,27 @@ insert_update_asset_types_history_sql = \
      "date='{date}', asset_type='{asset_type}', avg_percent_return='{avg_percent_return}'")
     
 read_asset_types_history_query = "SELECT * FROM asset_types_history"
-read_asset_types_history_columns = ['Date', 'Asset Type', 'AvgPercentReturn']
+read_asset_types_history_columns = ['Date', 'AssetType', 'AvgPercentReturn']
+
+# AccountTypeHistoryHelper - account_types_history table
+create_account_types_history_table_sql = \
+    ("CREATE TABLE IF NOT EXISTS account_types_history ("
+    "date DATE NOT NULL, "
+    "account_type VARCHAR(40) NOT NULL, "
+    "avg_percent_return DECIMAL(13, 2) NOT NULL, "
+    "PRIMARY KEY (date, account_type))")
+    
+insert_ignore_account_types_history_sql = \
+    ("INSERT IGNORE INTO account_types_history"
+     "(date, account_type, avg_percent_return) "
+     "VALUES ('{date}','{account_type}', '{avg_percent_return}')")
+     
+insert_update_account_types_history_sql = \
+    ("INSERT INTO account_types_history"
+     "(date, account_type, avg_percent_return) "
+     "VALUES ('{date}','{account_type}', '{avg_percent_return}') "
+     "ON DUPLICATE KEY UPDATE "
+     "date='{date}', account_type='{account_type}', avg_percent_return='{avg_percent_return}'")
+     
+read_account_types_history_query = "SELECT * FROM account_types_history"
+read_account_types_history_columns = ['Date', 'AccountType', 'AvgPercentReturn']
