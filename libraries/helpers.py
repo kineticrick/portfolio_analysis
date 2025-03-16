@@ -485,7 +485,7 @@ def gen_aggregated_historical_value(dimension: str,
     2016-02-18  Aerospace + Defense    3581.38
     """
     assert(type(symbols) == list)
-    assert(dimension in ['Sector', 'AssetType', 'AccountType'])
+    assert(dimension in ['Sector', 'AssetType', 'AccountType', 'Geography'])
     assert(cadence in CADENCE_MAP.keys()) 
     
     # Get all assets' historical values
@@ -526,7 +526,7 @@ def get_portfolio_summary() -> pd.DataFrame:
 def add_asset_info(asset_df: pd.DataFrame, truncate=True) -> pd.DataFrame:
     """
     Given a dataframe of assets, add additional information* about each asset
-    Info = Company Name, Sector, AssetType (Common Stock, ETF, REIT)
+    Info = Company Name, Sector, AssetType (Common Stock, ETF, REIT), Geography
     
     If truncate is True, all strings will be truncated to 20 characters
     

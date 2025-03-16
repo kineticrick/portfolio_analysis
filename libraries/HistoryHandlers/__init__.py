@@ -5,3 +5,4 @@ from .AssetTypeHistoryHandler import AssetTypeHistoryHandler
 from .PortfolioHistoryHandler import PortfolioHistoryHandler
 from .SectorHistoryHandler import SectorHistoryHandler
 from .AccountTypeHistoryHandler import AccountTypeHistoryHandler
+from .GeographyHistoryHandler import GeographyHistoryHandler
