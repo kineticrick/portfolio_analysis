@@ -57,6 +57,7 @@ def process_csvs(object_type: str, csv_files: str, brokerage_name: str="") -> li
                         object_dict['name'] = row['name']
                         object_dict['asset_type'] = row['asset_type']
                         object_dict['sector'] = row['sector']
+                        object_dict['geography'] = row['geography']
                     case 'splits':
                         object_dict['record_date'] = datetime.strptime(row.get('record_date'), "%m/%d/%Y").strftime("%Y-%m-%d")
                         object_dict['distribution_date'] = datetime.strptime(row.get('distribution_date'), "%m/%d/%Y").strftime("%Y-%m-%d")

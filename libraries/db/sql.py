@@ -32,7 +32,8 @@ create_entities_table_sql = \
      "symbol VARCHAR(4) NOT NULL, "
      "asset_type VARCHAR(100) NOT NULL, "
      "sector VARCHAR(100) NOT NULL, "
-     "PRIMARY KEY (name, symbol, asset_type, sector))")
+     "geography VARCHAR(100) NOT NULL, "
+     "PRIMARY KEY (name, symbol, asset_type, sector, geography))")
     
 create_acquisitions_table_sql = \
     ("CREATE TABLE IF NOT EXISTS acquisitions ("
@@ -55,8 +56,8 @@ insert_dividend_tx_sql = \
 
 insert_entities_sql = \
     ("INSERT IGNORE INTO entities"
-     "(name, symbol, asset_type, sector) "
-     "VALUES ('{name}','{symbol}','{asset_type}', '{sector}')")
+     "(name, symbol, asset_type, sector, geography) "
+     "VALUES ('{name}','{symbol}','{asset_type}', '{sector}', '{geography}')")
 
 delete_entities_single_sql = \
     ("DELETE FROM entities WHERE symbol = '{symbol}'")
@@ -120,7 +121,7 @@ acquisitions_query = "SELECT * FROM acquisitions"
 acquisitions_columns = ['Date', 'Symbol', 'Acquirer', 'Conversion_Ratio']
 
 read_entities_table_query = "SELECT * FROM entities"
-read_entities_table_columns = ['Name', 'Symbol', 'AssetType', 'Sector']
+read_entities_table_columns = ['Name', 'Symbol', 'AssetType', 'Sector', 'Geography']
 
 ### Master Log Summary Method ###
 master_log_buys_query = \
@@ -293,3 +294,26 @@ insert_update_account_types_history_sql = \
      
 read_account_types_history_query = "SELECT * FROM account_types_history"
 read_account_types_history_columns = ['Date', 'AccountType', 'AvgPercentReturn']
+
+# GeographyHistoryHelper - geography_history table
+create_geography_history_table_sql = \
+    ("CREATE TABLE IF NOT EXISTS geography_history ("
+    "date DATE NOT NULL, "
+    "geography VARCHAR(40) NOT NULL, "
+    "avg_percent_return DECIMAL(13, 2) NOT NULL, "
+    "PRIMARY KEY (date, geography))")
+    
+insert_ignore_geography_history_sql = \
+    ("INSERT IGNORE INTO geography_history"
+     "(date, geography, avg_percent_return) "
+     "VALUES ('{date}','{geography}', '{avg_percent_return}')")
+    
+insert_update_geography_history_sql = \
+    ("INSERT INTO geography_history"
+     "(date, geography, avg_percent_return) "
+     "VALUES ('{date}','{geography}', '{avg_percent_return}') "
+     "ON DUPLICATE KEY UPDATE "
+     "date='{date}', geography='{geography}', avg_percent_return='{avg_percent_return}'")   
+     
+read_geography_history_query = "SELECT * FROM geography_history"
+read_geography_history_columns = ['Date', 'Geography', 'AvgPercentReturn']

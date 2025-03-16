@@ -30,6 +30,11 @@ account_types = assets_table_df['AccountType'].unique().tolist()
 account_types = [{'label': x, 'value': x} for x in account_types]
 account_types = sorted(account_types, key=lambda x: x['label'])
 
+# Retrieve list of unique geography to be used in dropdown
+geography = assets_table_df['Geography'].unique().tolist()
+geography = [{'label': x, 'value': x} for x in geography]
+geography = sorted(geography, key=lambda x: x['label'])
+
 # Generate mapping to allow for persistent checkbox selection across 
 # resorting of table 
 row_symbol_mapping = {row: symbol 
@@ -41,10 +46,11 @@ row_symbol_mapping = {row: symbol
     Input('sector-select-dropdown', 'value'),
     Input('asset-type-select-dropdown', 'value'),
     Input('account-type-select-dropdown', 'value'),
+    Input('geography-select-dropdown', 'value'),
     Input('assets-table', 'selected_rows'),
     Input('assets-interval-dropdown', 'value')
 )
-def update_assets_table(sectors, asset_types, account_types, selected_rows, interval): 
+def update_assets_table(sectors, asset_types, account_types, geography, selected_rows, interval): 
     global assets_table_df, row_symbol_mapping
 
     # Get list of symbols of assets that are in the 
@@ -64,6 +70,12 @@ def update_assets_table(sectors, asset_types, account_types, selected_rows, inte
     symbols_by_account_type = \
         (assets_table_df[assets_table_df['AccountType'].isin(account_types)]['Symbol']
         if account_types else [])
+    
+    # Get list of symbols of assets that are of the 
+    # selected geography from assets_table_df
+    symbols_by_geography = \
+        (assets_table_df[assets_table_df['Geography'].isin(geography)]['Symbol']
+        if geography else [])
 
     # Using current mapping, and based on incoming selected rows 
     # index numbers, get the corresponding symbols
@@ -76,7 +88,8 @@ def update_assets_table(sectors, asset_types, account_types, selected_rows, inte
     final_selected_symbols = list(set(selected_symbols) | 
                                   set(symbols_by_sector) |
                                   set(symbols_by_asset_type) |
-                                  set(symbols_by_account_type))
+                                  set(symbols_by_account_type) |
+                                  set(symbols_by_geography))
 
     # Sort by interval given (ie "3m" = sort all assets 
     # by best returns over 3 months)
@@ -230,6 +243,17 @@ assets_tab = dbc.Container(
                     options=account_types,
                     id='account-type-select-dropdown',
                     placeholder='Select account type(s)',
+                    multi=True,
+                ),
+                width={'offset': 1, 'size': 3}
+            ),
+        ],),
+        dbc.Row([
+            dbc.Col(
+                dcc.Dropdown(
+                    options=geography,
+                    id='geography-select-dropdown',
+                    placeholder='Select geography(s)',
                     multi=True,
                 ),
                 width={'offset': 1, 'size': 3}
