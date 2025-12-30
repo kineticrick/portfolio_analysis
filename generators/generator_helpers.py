@@ -172,12 +172,14 @@ def validate_transactions(transactions: list[dict], entities: list[dict]) -> lis
             if tx['symbol'] not in entity_symbols:
                 missing_entities.append(tx['symbol'])
     except: 
+        print()
         print("ERROR: Problem found with transaction:")
         print(tx)
         print()
         raise   
 
     if missing_entities:
+        print()
         print("ERROR: The following symbols are missing from entities:")
         print(",".join(sorted(set(missing_entities))))
         print()
