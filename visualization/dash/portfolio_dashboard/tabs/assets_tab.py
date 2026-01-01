@@ -50,84 +50,91 @@ row_symbol_mapping = {row: symbol
     Input('assets-table', 'selected_rows'),
     Input('assets-interval-dropdown', 'value')
 )
-def update_assets_table(sectors, asset_types, account_types, geography, selected_rows, interval): 
-    global assets_table_df, row_symbol_mapping
+def update_assets_table(sectors, asset_types, account_types, geography, selected_rows, interval):
+    try:
+        global assets_table_df, row_symbol_mapping
 
-    # Get list of symbols of assets that are in the 
-    # selected sectors from assets_table_df
-    symbols_by_sector = \
-        (assets_table_df[assets_table_df['Sector'].isin(sectors)]['Symbol']
-        if sectors else [])
-    
-    # Get list of symbols of assets that are of the 
-    # selected asset types from assets_table_df
-    symbols_by_asset_type = \
-        (assets_table_df[assets_table_df['AssetType'].isin(asset_types)]['Symbol']
-        if asset_types else [])
-    
-    # Get list of symbols of assets that are of the 
-    # selected account types from assets_table_df
-    symbols_by_account_type = \
-        (assets_table_df[assets_table_df['AccountType'].isin(account_types)]['Symbol']
-        if account_types else [])
-    
-    # Get list of symbols of assets that are of the 
-    # selected geography from assets_table_df
-    symbols_by_geography = \
-        (assets_table_df[assets_table_df['Geography'].isin(geography)]['Symbol']
-        if geography else [])
+        # Get list of symbols of assets that are in the
+        # selected sectors from assets_table_df
+        symbols_by_sector = \
+            (assets_table_df[assets_table_df['Sector'].isin(sectors)]['Symbol']
+            if sectors else [])
 
-    # Using current mapping, and based on incoming selected rows 
-    # index numbers, get the corresponding symbols
-    # NOTE: Not using selected_row_ids because it is highly 
-    # unreliable and non-deterministic
-    selected_symbols = \
-        ([row_symbol_mapping[row] for row in selected_rows] 
-         if selected_rows else [])
+        # Get list of symbols of assets that are of the
+        # selected asset types from assets_table_df
+        symbols_by_asset_type = \
+            (assets_table_df[assets_table_df['AssetType'].isin(asset_types)]['Symbol']
+            if asset_types else [])
 
-    final_selected_symbols = list(set(selected_symbols) | 
-                                  set(symbols_by_sector) |
-                                  set(symbols_by_asset_type) |
-                                  set(symbols_by_account_type) |
-                                  set(symbols_by_geography))
+        # Get list of symbols of assets that are of the
+        # selected account types from assets_table_df
+        symbols_by_account_type = \
+            (assets_table_df[assets_table_df['AccountType'].isin(account_types)]['Symbol']
+            if account_types else [])
 
-    # Sort by interval given (ie "3m" = sort all assets 
-    # by best returns over 3 months)
-    assets_table_df = assets_table_df.sort_values(by=interval, ascending=False)
-    
-    # Rebuild row:symbol mapping, since the ordering of the symbols has now changed
-    row_symbol_mapping = {row: symbol 
-                          for row, symbol 
-                          in enumerate(assets_table_df['Symbol'])}
-    
-    # Based on "selected_symbols" above, now get the corresponding 
-    # row index to indicate which rows should be selected
-    if final_selected_symbols:
-        selected_rows = [row for row, symbol in row_symbol_mapping.items() 
-                         if symbol in final_selected_symbols]
-    else: 
-        selected_rows = []
+        # Get list of symbols of assets that are of the
+        # selected geography from assets_table_df
+        symbols_by_geography = \
+            (assets_table_df[assets_table_df['Geography'].isin(geography)]['Symbol']
+            if geography else [])
 
-    data_table = dash_table.DataTable(
-        id='assets-table',
-        columns = columns,
-        data=assets_table_df.to_dict('records'),
-        style_header={
-            'whiteSpace': 'normal',
-            'height': 'auto',
-        },
-        style_cell={
-            'textAlign': 'center',
-            'fontSize': '13px',
-        },
-        fixed_rows={'headers': True},
-        sort_action='native',
-        sort_mode='multi',
-        row_selectable='multi',
-        selected_rows=selected_rows,
-    )
+        # Using current mapping, and based on incoming selected rows
+        # index numbers, get the corresponding symbols
+        # NOTE: Not using selected_row_ids because it is highly
+        # unreliable and non-deterministic
+        selected_symbols = \
+            ([row_symbol_mapping[row] for row in selected_rows]
+             if selected_rows else [])
 
-    return data_table
+        final_selected_symbols = list(set(selected_symbols) |
+                                      set(symbols_by_sector) |
+                                      set(symbols_by_asset_type) |
+                                      set(symbols_by_account_type) |
+                                      set(symbols_by_geography))
+
+        # Sort by interval given (ie "3m" = sort all assets
+        # by best returns over 3 months)
+        assets_table_df = assets_table_df.sort_values(by=interval, ascending=False)
+
+        # Rebuild row:symbol mapping, since the ordering of the symbols has now changed
+        row_symbol_mapping = {row: symbol
+                              for row, symbol
+                              in enumerate(assets_table_df['Symbol'])}
+
+        # Based on "selected_symbols" above, now get the corresponding
+        # row index to indicate which rows should be selected
+        if final_selected_symbols:
+            selected_rows = [row for row, symbol in row_symbol_mapping.items()
+                             if symbol in final_selected_symbols]
+        else:
+            selected_rows = []
+
+        data_table = dash_table.DataTable(
+            id='assets-table',
+            columns = columns,
+            data=assets_table_df.to_dict('records'),
+            style_header={
+                'whiteSpace': 'normal',
+                'height': 'auto',
+            },
+            style_cell={
+                'textAlign': 'center',
+                'fontSize': '13px',
+            },
+            fixed_rows={'headers': True},
+            sort_action='native',  # Client-side sorting
+            sort_mode='multi',
+            filter_action='native',  # Enable client-side filtering (QUICK WIN!)
+            row_selectable='multi',
+            selected_rows=selected_rows,
+            page_action='native',  # Enable pagination
+            page_size=50,  # Show 50 rows per page
+        )
+
+        return data_table
+    except Exception as e:
+        print(f"Error in update_assets_table: {e}")
+        return html.Div(f"Error loading assets table: {str(e)}")
 
 
 
@@ -136,43 +143,68 @@ def update_assets_table(sectors, asset_types, account_types, geography, selected
     Input('assets-table', 'selected_rows'),
     Input('assets-interval-dropdown', 'value'))
 def update_assets_hist_graph(selected_rows, interval):
-    # Generate base dataframe containing all history for all assets
-    assets_history_df = DASH_HANDLER.portfolio_assets_history_df
+    try:
+        # Generate base dataframe containing all history for all assets
+        assets_history_df = DASH_HANDLER.portfolio_assets_history_df
 
-    # Filter data based on the symbols selected via checkbox in the data table
-    if selected_rows:
-        selected_symbols = [row_symbol_mapping[row] for row in selected_rows]
-        assets_history_df = assets_history_df[
-            assets_history_df['Symbol'].isin(selected_symbols)]
+        # Filter data based on the symbols selected via checkbox in the data table
+        if selected_rows:
+            selected_symbols = [row_symbol_mapping[row] for row in selected_rows
+                                if row in row_symbol_mapping]
+            if selected_symbols:
+                assets_history_df = assets_history_df[
+                    assets_history_df['Symbol'].isin(selected_symbols)]
 
-    # If 'Lifetime' is the interval, then we dont need to filter by date
-    # Otherwise, reduce data to only include data from the start date
-    if interval != "Lifetime":
-        # Determine number of days to display for each asset
-        interval_days = {k:v for (k,v) in DASH_HANDLER.performance_milestones}
+        # If 'Lifetime' is the interval, then we dont need to filter by date
+        # Otherwise, reduce data to only include data from the start date
+        if interval != "Lifetime":
+            # Determine number of days to display for each asset
+            interval_days = {k:v for (k,v) in DASH_HANDLER.performance_milestones}
 
-        days = interval_days[interval]
-        offset = DateOffset(days=days)
-        start_date =  pd.to_datetime('today') - offset
-        start_date = start_date.date()
+            days = interval_days.get(interval, 365)  # Default to 1 year if not found
+            offset = DateOffset(days=days)
+            start_date = pd.to_datetime('today') - offset
+            start_date = start_date.date()
 
-        assets_history_df = \
-            assets_history_df[assets_history_df['Date'] >= start_date]
+            assets_history_df = \
+                assets_history_df[assets_history_df['Date'] >= start_date]
 
-    assets_history_df = DASH_HANDLER.expand_history_df(assets_history_df)
-    
-    # Generate Dash line graph for assets
-    assets_history_fig = px.line(
-        assets_history_df,
-        x=assets_history_df['Date'], 
-        y=assets_history_df['ClosingPrice % Change'],
-        hover_data={'Value': ':$,.2f', 'ClosingPrice % Change': ':.2f%'},
-        color=assets_history_df['Symbol'],
-        line_dash=assets_history_df['Sector'],
-    )
-    assets_history_fig.update_layout(height=800)
+        if assets_history_df.empty:
+            import plotly.graph_objs as go
+            return go.Figure().update_layout(title="No data available. Select assets from the table above.")
 
-    return assets_history_fig
+        # QUICK WIN: Use precomputed expanded data instead of calling expand_history_df
+        # Filter the already-expanded dataframe instead of expanding filtered data
+        expanded_df = DASH_HANDLER.portfolio_assets_history_expanded_df
+
+        # Apply the same filtering that was applied to assets_history_df
+        if selected_rows:
+            selected_symbols = [row_symbol_mapping[row] for row in selected_rows
+                                if row in row_symbol_mapping]
+            if selected_symbols:
+                expanded_df = expanded_df[expanded_df['Symbol'].isin(selected_symbols)]
+
+        if interval != "Lifetime":
+            expanded_df = expanded_df[expanded_df['Date'] >= start_date]
+
+        assets_history_df = expanded_df
+
+        # Generate Dash line graph for assets
+        assets_history_fig = px.line(
+            assets_history_df,
+            x=assets_history_df['Date'],
+            y=assets_history_df['ClosingPrice % Change'],
+            hover_data={'Value': ':$,.2f', 'ClosingPrice % Change': ':.2f%'},
+            color=assets_history_df['Symbol'],
+            line_dash=assets_history_df['Sector'],
+        )
+        assets_history_fig.update_layout(height=800)
+
+        return assets_history_fig
+    except Exception as e:
+        print(f"Error in update_assets_hist_graph: {e}")
+        import plotly.graph_objs as go
+        return go.Figure().update_layout(title=f"Error loading chart: {str(e)}")
 
 assets_tab = dbc.Container(
     [        

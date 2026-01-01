@@ -444,7 +444,7 @@ def gen_assets_historical_value(symbols: list=[],
     merged_df = merged_df.round(2)
     
     # Fill in missing values with previous value, to cover weekends + holidays
-    merged_df = merged_df.fillna(method='ffill')
+    merged_df = merged_df.ffill()
     
     # Remove, if any, rows which precede the original start date 
     if start_date is not None:

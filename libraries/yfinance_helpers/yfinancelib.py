@@ -145,7 +145,7 @@ def get_historical_prices(tickers: list, start: str=None,
             
             # Fill in gaps with previous day's data
             data[['Symbol', 'ClosingPrice']] = \
-                data[['Symbol','ClosingPrice']].fillna(method='ffill')
+                data[['Symbol','ClosingPrice']].ffill()
                 
             cadence = CADENCE_MAP[interval]
         else: 
