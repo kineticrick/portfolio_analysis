@@ -53,6 +53,13 @@ class DashboardHandler:
         self.portfolio_assets_history_df = self.assets_history_df.loc[
             self.assets_history_df['Symbol'].isin(portfolio_symbols)]
 
+        # QUICK WIN: Precompute expanded history data (percentage changes + asset info)
+        # This avoids recalculating on every callback
+        print("Precomputing expanded asset history data...")
+        self.portfolio_assets_history_expanded_df = self.expand_history_df(
+            self.portfolio_assets_history_df.copy())
+        print("✓ Expanded asset history precomputed")
+
         # Get and set asset milestones
         self.asset_milestones = self.get_asset_milestones()
 
@@ -152,14 +159,20 @@ class DashboardHandler:
             milestone_date = pd.to_datetime('today') - offset
             milestone_date = milestone_date.strftime('%Y-%m-%d')
             
-            try: 
-                milestone_value = history_df.loc[milestone_date]['Value']
+            try:
+                row = history_df.loc[milestone_date]
+                # Handle case where .loc returns Series (single row) or DataFrame (multiple rows)
+                if isinstance(row, pd.DataFrame):
+                    milestone_value = row['Value'].iloc[0]
+                    symbol = row['Symbol'].iloc[0] if 'Symbol' in row else "PORTFOLIO"
+                    milestone_price = row['ClosingPrice'].iloc[0] if 'ClosingPrice' in row else None
+                else:
+                    milestone_value = row['Value']
+                    symbol = row['Symbol'] if 'Symbol' in row else "PORTFOLIO"
+                    milestone_price = row['ClosingPrice'] if 'ClosingPrice' in row else None
             except KeyError:
                 continue
-            
-            symbol = history_df.loc[milestone_date]['Symbol'] \
-                if 'Symbol' in history_df else "PORTFOLIO"
-            
+
             milestone_dict = {
                 'Date': milestone_date,
                 'Symbol': symbol,
@@ -167,28 +180,36 @@ class DashboardHandler:
                 'Current Value': current_value,
                 'Value': milestone_value,
             }
-            
+
             if current_price is not None:
                 milestone_dict['Current Price'] = current_price
-            
-            if 'ClosingPrice' in history_df:
-                milestone_price = history_df.loc[milestone_date]['ClosingPrice']
+
+            if milestone_price is not None:
                 milestone_dict['Price'] = milestone_price
             
             milestone_values.append(milestone_dict)
         
         # Get lifetime return
         earliest_date = history_df.index.min().date().strftime('%Y-%m-%d')
-        earliest_value = history_df.loc[earliest_date]['Value']
+        earliest_row = history_df.loc[earliest_date]
+        # Handle case where .loc returns Series (single row) or DataFrame (multiple rows)
+        if isinstance(earliest_row, pd.DataFrame):
+            earliest_value = earliest_row['Value'].iloc[0]
+            symbol = earliest_row['Symbol'].iloc[0] if 'Symbol' in earliest_row else "PORTFOLIO"
+            earliest_price = earliest_row['ClosingPrice'].iloc[0] if 'ClosingPrice' in earliest_row else None
+        else:
+            earliest_value = earliest_row['Value']
+            symbol = earliest_row['Symbol'] if 'Symbol' in earliest_row else "PORTFOLIO"
+            earliest_price = earliest_row['ClosingPrice'] if 'ClosingPrice' in earliest_row else None
+
         milestone_dict = {
                 'Date': earliest_date,
                 'Symbol': symbol,
                 'Interval': 'Lifetime',
                 'Value': earliest_value,
         }
-        if 'ClosingPrice' in history_df:
-            milestone_price = history_df.loc[earliest_date]['ClosingPrice']
-            milestone_dict['Price'] = milestone_price
+        if earliest_price is not None:
+            milestone_dict['Price'] = earliest_price
         milestone_values.append(milestone_dict)
         
         milestones_df = pd.DataFrame(milestone_values)
@@ -225,26 +246,31 @@ class DashboardHandler:
     def get_asset_milestones(self, symbols: list=[]) -> pd.DataFrame:
         """
         For symbols given, get value of asset at each milestone
-        
+
         If symbols are not provided, use all symbols in current portfolio
+
+        OPTIMIZED: Collects results and uses single concat instead of repeated concat in loop
         """
-        
+
         if not symbols:
             symbols = list(self.current_portfolio_summary_df['Symbol'].unique())
-            
-        milestones_df = pd.DataFrame()
-        for symbol in symbols: 
+
+        # OPTIMIZATION: Collect all milestones, then concat once
+        all_milestones = []
+
+        for symbol in symbols:
             # For each symbol, get the current value and history
             current_price = self.current_portfolio_summary_df.loc[
                 self.current_portfolio_summary_df['Symbol'] == symbol]['Current Price'].values[0]
             current_value = self.current_portfolio_summary_df.loc[
                 self.current_portfolio_summary_df['Symbol'] == symbol]['Current Value'].values[0]
+
             history_df = self.assets_history_df.loc[self.assets_history_df['Symbol'] == symbol]
-            
+
             if history_df.empty:
                 print(f"WARNING: No asset history found (local DB) for {symbol}. Ignoring...")
                 continue
-            
+
             # Index date for specific asset, since it's now a unique set of dates
             pd.set_option('mode.chained_assignment',None)
             history_df['Date'] = pd.to_datetime(history_df['Date'])
@@ -252,11 +278,17 @@ class DashboardHandler:
 
             # Generate milestones for each asset
             asset_milestones_df = \
-                self._gen_performance_milestones(history_df, current_value, 
+                self._gen_performance_milestones(history_df, current_value,
                                                  current_price=current_price)
-            
-            milestones_df = pd.concat([milestones_df, asset_milestones_df])
-        
+
+            all_milestones.append(asset_milestones_df)
+
+        # OPTIMIZATION: Single concat instead of repeated concat in loop
+        if all_milestones:
+            milestones_df = pd.concat(all_milestones)
+        else:
+            milestones_df = pd.DataFrame()
+
         return milestones_df
     
     #TODO: Implement this for all assets over entire history - and add N (ie top 5, 10)

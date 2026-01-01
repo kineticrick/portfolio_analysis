@@ -40,9 +40,9 @@ SYMBOL_BLACKLIST = [
     'LEN', #Returns as 'delisted' though doesnt seem to be
 ]
 
-MYSQL_CACHE_ENABLED = False
+MYSQL_CACHE_ENABLED = True  # Enabled for performance (was False)
 MYSQL_CACHE_HISTORY_TAG = 'historycaches'
-MYSQL_CACHE_TTL = 60*60*1
+MYSQL_CACHE_TTL = 60*60*4  # 4 hours (was 1 hour) - balance between freshness and performance
 
 ### Generators ###
 

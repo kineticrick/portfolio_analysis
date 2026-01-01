@@ -187,11 +187,11 @@ class AssetHypotheticalHistoryHandler(BaseHistoryHandler):
             asset_hypo_df = hist_prices_df[hist_prices_df['Symbol'] == symbol]
             asset_hypo_df['Owned'] = "Hypothetical"
 
-            # Stack hypotheticals under actuals, and project last "quantity" 
+            # Stack hypotheticals under actuals, and project last "quantity"
             # forward into every day of hypotheticals
             asset_combined_df = pd.concat([asset_actual_df, asset_hypo_df])
             asset_combined_df[['Quantity', 'ClosingPrice']] = \
-                asset_combined_df[['Quantity', 'ClosingPrice']].fillna(method='ffill')  
+                asset_combined_df[['Quantity', 'ClosingPrice']].ffill()  
             asset_combined_df['Date'] = pd.to_datetime(asset_combined_df['Date'])
             
             asset_combined_df['ClosingPrice'] = \

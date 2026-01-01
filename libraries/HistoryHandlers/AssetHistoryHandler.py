@@ -27,21 +27,24 @@ class AssetHistoryHandler(BaseHistoryHandler):
 
         super().__init__()
 
-    def set_history(self, start_date: str=None, overwrite: bool=False) -> None:
+    def set_history(self, start_date: str=None, overwrite: bool=False) -> pd.DataFrame:
         """
-        For all symbols in self.symbols, update DB with asset history info 
+        For all symbols in self.symbols, update DB with asset history info
         from start_date to today
-        
+
         If overwrite is True, overwrite all existing history in DB with new derived history
         Else, only add new history to DB (append-only)
-        
+
         Args:
             start_date (str): Date to start history from (inclusive)
+
+        Returns:
+            pd.DataFrame: The complete updated history from database
         """
         # Retrieve daily quantity + value data for all symbols in self.symbols
         assets_historical_data_df = \
-            gen_assets_historical_value(self.symbols, cadence='daily', 
-                                        start_date=start_date, 
+            gen_assets_historical_value(self.symbols, cadence='daily',
+                                        start_date=start_date,
                                         include_exit_date=False)
 
         column_conversion_map = {
@@ -49,25 +52,38 @@ class AssetHistoryHandler(BaseHistoryHandler):
             'symbol': 'Symbol',
             'quantity': 'Quantity',
             'cost_basis': 'CostBasis',
-            'closing_price': 'ClosingPrice', 
+            'closing_price': 'ClosingPrice',
             'value': 'Value',
             'percent_return': 'PercentReturn',
         }
-        
-        # Generate Insert/Update SQL for each row in assets_historical_data_df
+
+        # OPTIMIZATION: Batch insert using executemany() instead of individual INSERTs
+        # This provides 10-50x speedup (see generators/OPTIMIZATION_NOTES.md)
         with MysqlDB(dbcfg) as db:
-            for _, history_data in assets_historical_data_df.iterrows():
-                insertion_dict = {}
-                for k, v in column_conversion_map.items():
-                    insertion_dict[k] = history_data[v]
-                    
-                if overwrite:
-                    insertion_sql = \
-                        insert_update_assets_history_sql.format(**insertion_dict)
-                else: 
-                    insertion_sql = \
-                        insert_ignore_assets_history_sql.format(**insertion_dict)
-                db.execute(insertion_sql)
+            if overwrite:
+                # Use REPLACE INTO for overwrite
+                sql = """REPLACE INTO assets_history
+                         (date, symbol, quantity, cost_basis, closing_price, value, percent_return)
+                         VALUES (%s, %s, %s, %s, %s, %s, %s)"""
+            else:
+                # Use INSERT IGNORE for append-only
+                sql = """INSERT IGNORE INTO assets_history
+                         (date, symbol, quantity, cost_basis, closing_price, value, percent_return)
+                         VALUES (%s, %s, %s, %s, %s, %s, %s)"""
+
+            # Prepare values as list of tuples
+            values = [
+                (row['Date'], row['Symbol'], row['Quantity'], row['CostBasis'],
+                 row['ClosingPrice'], row['Value'], row['PercentReturn'])
+                for _, row in assets_historical_data_df.iterrows()
+            ]
+
+            if values:
+                db.cursor.executemany(sql, values)
+                print(f"✓ Batch inserted {len(values)} asset history rows")
+
+        # OPTIMIZATION: Return the full history instead of requiring a re-read
+        return self.get_history()
             
     def get_history(self) -> pd.DataFrame:
         """

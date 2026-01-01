@@ -27,35 +27,38 @@ class PortfolioHistoryHandler(BaseHistoryHandler):
         self.assets_history_df = assets_history_df
         super().__init__()
 
-    def set_history(self, start_date: str=None, overwrite: bool=False) -> None:
+    def set_history(self, start_date: str=None, overwrite: bool=False) -> pd.DataFrame:
         """
         Update DB with portfolio history info from start_date to today
-        
-        If overwrite is True, overwrite all existing history in DB with 
+
+        If overwrite is True, overwrite all existing history in DB with
         new derived history. Else, only add new history to DB (append-only)
-        
+
         Args:
             start_date (str): Date to start history from (inclusive)
+
+        Returns:
+            pd.DataFrame: The complete updated history from database
         """
-        
-        if self.assets_history_df is None: 
-            # Initialize asset_history_handler with all symbols, to ensure that full 
+
+        if self.assets_history_df is None:
+            # Initialize asset_history_handler with all symbols, to ensure that full
             # portfolio history can be derived + up-to-date
             asset_history_handler = AssetHistoryHandler()
-            
+
             # Get asset history from DB into dataframe
             self.assets_history_df = asset_history_handler.history_df
-        
+
         # Aggregate over dates to get total portfolio value for each day
         daily_portfolio_value_df = self.assets_history_df.groupby('Date')['Value'].sum()
-        
+
         # Convert from Series to DataFrame
         daily_portfolio_value_df = daily_portfolio_value_df.reset_index()
-        
-        # Set date column as index 
+
+        # Set date column as index
         daily_portfolio_value_df['Date'] = pd.to_datetime(daily_portfolio_value_df['Date'])
         # daily_portfolio_value_df = daily_portfolio_value_df.set_index('Date')
-        
+
         # Filter to just start_date to today
         if start_date is not None:
             daily_portfolio_value_df = \
@@ -65,23 +68,28 @@ class PortfolioHistoryHandler(BaseHistoryHandler):
             'date': 'Date',
             'value': 'Value',
         }
-    
-        # Insert into DB
+
+        # OPTIMIZATION: Batch insert using executemany() instead of individual INSERTs
         with MysqlDB(dbcfg) as db:
-            for _, history_data in daily_portfolio_value_df.iterrows():
-                insertion_dict = {}
-                for k, v in column_conversion_map.items():
-                    insertion_dict[k] = history_data[v]
-                
-                # Convert date to date object
-                insertion_dict['date'] = insertion_dict['date'].date()
-                if overwrite:
-                    insertion_sql = \
-                        insert_update_portfolio_history_sql.format(**insertion_dict)
-                else: 
-                    insertion_sql = \
-                        insert_ignore_portfolio_history_sql.format(**insertion_dict)
-                db.execute(insertion_sql)
+            if overwrite:
+                sql = """REPLACE INTO portfolio_history (date, value)
+                         VALUES (%s, %s)"""
+            else:
+                sql = """INSERT IGNORE INTO portfolio_history (date, value)
+                         VALUES (%s, %s)"""
+
+            # Prepare values as list of tuples
+            values = [
+                (row['Date'].date(), float(row['Value']))
+                for _, row in daily_portfolio_value_df.iterrows()
+            ]
+
+            if values:
+                db.cursor.executemany(sql, values)
+                print(f"✓ Batch inserted {len(values)} portfolio history rows")
+
+        # OPTIMIZATION: Return the full history instead of requiring a re-read
+        return self.get_history()
 
     def get_history(self) -> pd.DataFrame:
         """
