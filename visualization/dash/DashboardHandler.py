@@ -160,18 +160,12 @@ class DashboardHandler:
             milestone_date = milestone_date.strftime('%Y-%m-%d')
             
             try:
-                row = history_df.loc[milestone_date]
-                # Handle case where .loc returns Series (single row) or DataFrame (multiple rows)
-                if isinstance(row, pd.DataFrame):
-                    milestone_value = row['Value'].iloc[0]
-                    symbol = row['Symbol'].iloc[0] if 'Symbol' in row else "PORTFOLIO"
-                    milestone_price = row['ClosingPrice'].iloc[0] if 'ClosingPrice' in row else None
-                else:
-                    milestone_value = row['Value']
-                    symbol = row['Symbol'] if 'Symbol' in row else "PORTFOLIO"
-                    milestone_price = row['ClosingPrice'] if 'ClosingPrice' in row else None
+                milestone_value = history_df.loc[milestone_date]['Value']
             except KeyError:
                 continue
+
+            symbol = history_df.loc[milestone_date]['Symbol'] \
+                if 'Symbol' in history_df else "PORTFOLIO"
 
             milestone_dict = {
                 'Date': milestone_date,
@@ -184,32 +178,24 @@ class DashboardHandler:
             if current_price is not None:
                 milestone_dict['Current Price'] = current_price
 
-            if milestone_price is not None:
+            if 'ClosingPrice' in history_df:
+                milestone_price = history_df.loc[milestone_date]['ClosingPrice']
                 milestone_dict['Price'] = milestone_price
             
             milestone_values.append(milestone_dict)
         
         # Get lifetime return
         earliest_date = history_df.index.min().date().strftime('%Y-%m-%d')
-        earliest_row = history_df.loc[earliest_date]
-        # Handle case where .loc returns Series (single row) or DataFrame (multiple rows)
-        if isinstance(earliest_row, pd.DataFrame):
-            earliest_value = earliest_row['Value'].iloc[0]
-            symbol = earliest_row['Symbol'].iloc[0] if 'Symbol' in earliest_row else "PORTFOLIO"
-            earliest_price = earliest_row['ClosingPrice'].iloc[0] if 'ClosingPrice' in earliest_row else None
-        else:
-            earliest_value = earliest_row['Value']
-            symbol = earliest_row['Symbol'] if 'Symbol' in earliest_row else "PORTFOLIO"
-            earliest_price = earliest_row['ClosingPrice'] if 'ClosingPrice' in earliest_row else None
-
+        earliest_value = history_df.loc[earliest_date]['Value']
         milestone_dict = {
                 'Date': earliest_date,
                 'Symbol': symbol,
                 'Interval': 'Lifetime',
                 'Value': earliest_value,
         }
-        if earliest_price is not None:
-            milestone_dict['Price'] = earliest_price
+        if 'ClosingPrice' in history_df:
+            milestone_price = history_df.loc[earliest_date]['ClosingPrice']
+            milestone_dict['Price'] = milestone_price
         milestone_values.append(milestone_dict)
         
         milestones_df = pd.DataFrame(milestone_values)
@@ -527,7 +513,9 @@ class DashboardHandler:
         returns_df = self.asset_milestones 
         returns_df = returns_df.pivot(
             index='Symbol', columns='Interval', values='Price % Return')
-        returns_df = returns_df[returns_cols]
+        # Only select columns that exist (some intervals may lack historical data)
+        available_cols = [col for col in returns_cols if col in returns_df.columns]
+        returns_df = returns_df[available_cols]
         
         summary_df = self.current_portfolio_summary_df[summary_cols]
         
