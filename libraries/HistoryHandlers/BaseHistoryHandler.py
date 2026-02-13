@@ -9,11 +9,14 @@ import pandas as pd
 from pandas.tseries.offsets import Day, BDay
 from libraries.db import dbcfg, MysqlDB
 from libraries.db.mysql_helpers import mysql_cache_evict
+from libraries.db.sql import history_table_indexes
 from libraries.globals import MYSQL_CACHE_HISTORY_TAG
 
 class BaseHistoryHandler:
     # Placeholder for SQL to create history table in DB
     create_history_table_sql = None
+    # Table name used for index lookup (set by subclasses or derived from SQL)
+    history_table_name = None
     
     def __init__(self) -> None:
         """ 
@@ -67,12 +70,15 @@ class BaseHistoryHandler:
     
     def gen_table(self) -> None:
         """
-        Generate asset_history table in DB, if not already present
+        Generate history table in DB if not already present, and create indexes.
         """
         with MysqlDB(dbcfg) as db:
             db.execute(self.create_history_table_sql)
 
-        # TODO: Figure out better way to instantiate table if not present 
+            # Create indexes for this table if defined
+            if self.history_table_name and self.history_table_name in history_table_indexes:
+                for index_sql in history_table_indexes[self.history_table_name]:
+                    db.create_index_safe(index_sql)
         
     def get_history(self) -> pd.DataFrame:
         """Retrieve history from database. Implemented by subclasses."""

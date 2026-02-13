@@ -579,7 +579,7 @@ def get_portfolio_current_value() -> tuple[pd.DataFrame, float]:
         round(summary_df['Current Value'] / total_value * 100, 2)
         
     # Add asset info
-    summary_df = summary_df.drop(columns=['Name'], axis=1)
+    summary_df = summary_df.drop(columns=['Name'])
     summary_df = add_asset_info(summary_df, truncate=True)
     
     # Add lifetime return

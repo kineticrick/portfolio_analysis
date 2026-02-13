@@ -158,14 +158,20 @@ class DashboardHandler:
             offset = DateOffset(days=days)
             milestone_date = pd.to_datetime('today') - offset
             milestone_date = milestone_date.strftime('%Y-%m-%d')
-            
+
             try:
-                milestone_value = history_df.loc[milestone_date]['Value']
+                row = history_df.loc[milestone_date]
             except KeyError:
                 continue
 
-            symbol = history_df.loc[milestone_date]['Symbol'] \
-                if 'Symbol' in history_df else "PORTFOLIO"
+            # If loc returns a DataFrame (multiple or zero rows), handle it
+            if isinstance(row, pd.DataFrame):
+                if row.empty:
+                    continue
+                row = row.iloc[0]
+
+            milestone_value = row['Value']
+            symbol = row['Symbol'] if 'Symbol' in row else "PORTFOLIO"
 
             milestone_dict = {
                 'Date': milestone_date,
@@ -178,24 +184,28 @@ class DashboardHandler:
             if current_price is not None:
                 milestone_dict['Current Price'] = current_price
 
-            if 'ClosingPrice' in history_df:
-                milestone_price = history_df.loc[milestone_date]['ClosingPrice']
-                milestone_dict['Price'] = milestone_price
-            
+            if 'ClosingPrice' in row:
+                milestone_dict['Price'] = row['ClosingPrice']
+
             milestone_values.append(milestone_dict)
-        
+
         # Get lifetime return
         earliest_date = history_df.index.min().date().strftime('%Y-%m-%d')
-        earliest_value = history_df.loc[earliest_date]['Value']
+        lifetime_row = history_df.loc[earliest_date]
+        if isinstance(lifetime_row, pd.DataFrame):
+            if lifetime_row.empty:
+                return pd.DataFrame(milestone_values)
+            lifetime_row = lifetime_row.iloc[0]
+
+        earliest_value = lifetime_row['Value']
         milestone_dict = {
                 'Date': earliest_date,
                 'Symbol': symbol,
                 'Interval': 'Lifetime',
                 'Value': earliest_value,
         }
-        if 'ClosingPrice' in history_df:
-            milestone_price = history_df.loc[earliest_date]['ClosingPrice']
-            milestone_dict['Price'] = milestone_price
+        if 'ClosingPrice' in lifetime_row:
+            milestone_dict['Price'] = lifetime_row['ClosingPrice']
         milestone_values.append(milestone_dict)
         
         milestones_df = pd.DataFrame(milestone_values)
