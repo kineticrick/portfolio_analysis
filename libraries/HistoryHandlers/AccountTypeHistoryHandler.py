@@ -5,9 +5,7 @@ import pandas as pd
 sys.path.append(os.path.join(os.path.dirname(__file__), '../..'))
 
 from libraries.db import dbcfg, MysqlDB
-from libraries.db.sql import (create_account_types_history_table_sql, 
-                              insert_update_account_types_history_sql,
-                              insert_ignore_account_types_history_sql,
+from libraries.db.sql import (create_account_types_history_table_sql,
                               read_account_types_history_query,
                               read_account_types_history_columns)
 from libraries.HistoryHandlers import BaseHistoryHandler
@@ -16,6 +14,7 @@ from libraries.helpers import gen_aggregated_historical_value
 
 class AccountTypeHistoryHandler(BaseHistoryHandler):
     create_history_table_sql = create_account_types_history_table_sql
+    history_table_name = 'account_types_history'
     
     def __init__(self) -> None: 
         """ 
@@ -46,26 +45,23 @@ class AccountTypeHistoryHandler(BaseHistoryHandler):
             account_types_historical_data_df[
                 account_types_historical_data_df['AccountType'] != 'Agnostic']
             
-        column_conversion_map = {
-            'date': 'Date',
-            'account_type': 'AccountType',
-            'avg_percent_return': 'AvgPercentReturn',
-        }
-        
-        # Generate Insert/Update SQL for each row in account_types_historical_data_df
+        # OPTIMIZATION: Batch insert using executemany() instead of individual INSERTs
         with MysqlDB(dbcfg) as db:
-            for _, history_data in account_types_historical_data_df.iterrows():
-                insertion_dict = {}
-                for k, v in column_conversion_map.items():
-                    insertion_dict[k] = history_data[v]
-                    
-                if overwrite:
-                    insertion_sql = \
-                        insert_update_account_types_history_sql.format(**insertion_dict)
-                else: 
-                    insertion_sql = \
-                        insert_ignore_account_types_history_sql.format(**insertion_dict)
-                db.execute(insertion_sql)
+            if overwrite:
+                sql = """REPLACE INTO account_types_history (date, account_type, avg_percent_return)
+                         VALUES (%s, %s, %s)"""
+            else:
+                sql = """INSERT IGNORE INTO account_types_history (date, account_type, avg_percent_return)
+                         VALUES (%s, %s, %s)"""
+
+            values = [
+                (row['Date'], row['AccountType'], float(row['AvgPercentReturn']))
+                for _, row in account_types_historical_data_df.iterrows()
+            ]
+
+            if values:
+                db.cursor.executemany(sql, values)
+                print(f"✓ Batch inserted {len(values)} account type history rows")
             
     def get_history(self) -> pd.DataFrame:
         """

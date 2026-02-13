@@ -60,3 +60,16 @@ class MysqlDB:
     def query(self, sql, params=None):
         self.cursor.execute(sql, params or ())
         return self.fetchall()
+
+    def create_index_safe(self, sql):
+        """Execute a CREATE INDEX statement, ignoring if index already exists.
+
+        MySQL error 1061 = Duplicate key name (index already exists).
+        """
+        try:
+            self.cursor.execute(sql)
+        except mysql.connector.errors.ProgrammingError as e:
+            if e.errno == 1061:  # Duplicate key name
+                pass
+            else:
+                raise

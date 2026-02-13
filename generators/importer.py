@@ -26,6 +26,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from libraries.db.sql import *
+from libraries.db.sql import transaction_table_indexes
 from libraries.db import MysqlDB, dbcfg
 from libraries.globals import FILEDIRS
 from generators.generator_helpers import (build_file_lists,
@@ -185,6 +186,12 @@ def main():
         bulk_insert_entities(db, entities)
         bulk_insert_splits(db, splits)
         bulk_insert_transactions(db, all_transactions)
+
+        # Create indexes for faster queries
+        print("\nCreating indexes...")
+        for index_sql in transaction_table_indexes:
+            db.create_index_safe(index_sql)
+        print("✓ Indexes created")
 
         # Commit is handled automatically by context manager
         print("\nCommitting transaction...")

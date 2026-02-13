@@ -7,10 +7,8 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../..'))
 
 from libraries.HistoryHandlers import BaseHistoryHandler, AssetHistoryHandler
 from libraries.db import dbcfg, MysqlDB
-from libraries.db.sql import (create_assets_hypothetical_history_table_sql, 
-                           insert_update_assets_hypothetical_history_sql, 
-                           insert_ignore_assets_hypothetical_history_sql, 
-                           read_assets_hypothetical_history_query, 
+from libraries.db.sql import (create_assets_hypothetical_history_table_sql,
+                           read_assets_hypothetical_history_query,
                            read_assets_hypothetical_history_columns)
 from libraries.pandas_helpers import print_full, mysql_to_df
 from libraries.helpers import (build_master_log, gen_hist_quantities_mult, 
@@ -20,6 +18,7 @@ from pandas.tseries.offsets import BDay
 
 class AssetHypotheticalHistoryHandler(BaseHistoryHandler):
     create_history_table_sql = create_assets_hypothetical_history_table_sql
+    history_table_name = 'assets_hypothetical_history'
     
     def __init__(self, symbols: list=[], 
                  assets_history_df: pd.DataFrame=None) -> None:
@@ -205,29 +204,28 @@ class AssetHypotheticalHistoryHandler(BaseHistoryHandler):
         
         # Filter only hypothetical rows to store into DB
         master_df = master_df[master_df['Owned'] == 'Hypothetical']
-        
-        column_conversion_map = {
-            'date': 'Date',
-            'symbol': 'Symbol',
-            'quantity': 'Quantity',
-            'closing_price': 'ClosingPrice', 
-            'value': 'Value'
-        }
-        
-        # Write data to DB
+        master_df = master_df.dropna(subset=['Quantity', 'ClosingPrice', 'Value'])
+
+        # OPTIMIZATION: Batch insert using executemany() instead of individual INSERTs
         with MysqlDB(dbcfg) as db:
-            for _, hypo_data in master_df.iterrows():
-                insertion_dict = {}
-                for k, v in column_conversion_map.items():
-                    insertion_dict[k] = hypo_data[v]
-                    
-                if overwrite:
-                    insertion_sql = \
-                        insert_update_assets_hypothetical_history_sql.format(**insertion_dict)
-                else: 
-                    insertion_sql = \
-                        insert_ignore_assets_hypothetical_history_sql.format(**insertion_dict)
-                db.execute(insertion_sql)
+            if overwrite:
+                sql = """REPLACE INTO assets_hypothetical_history
+                         (date, symbol, quantity, closing_price, value)
+                         VALUES (%s, %s, %s, %s, %s)"""
+            else:
+                sql = """INSERT IGNORE INTO assets_hypothetical_history
+                         (date, symbol, quantity, closing_price, value)
+                         VALUES (%s, %s, %s, %s, %s)"""
+
+            values = [
+                (row['Date'], row['Symbol'], int(row['Quantity']),
+                 float(row['ClosingPrice']), float(row['Value']))
+                for _, row in master_df.iterrows()
+            ]
+
+            if values:
+                db.cursor.executemany(sql, values)
+                print(f"✓ Batch inserted {len(values)} hypothetical history rows")
 
     def get_history(self) -> pd.DataFrame:
         """

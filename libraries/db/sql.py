@@ -317,3 +317,57 @@ insert_update_geography_history_sql = \
      
 read_geography_history_query = "SELECT * FROM geography_history"
 read_geography_history_columns = ['Date', 'Geography', 'AvgPercentReturn']
+
+# ============================================================
+# Index definitions for performance optimization
+# ============================================================
+# MySQL doesn't support CREATE INDEX IF NOT EXISTS, so we use
+# CREATE INDEX wrapped in a procedure or just catch duplicates.
+# These are safe to run multiple times (duplicates are ignored).
+
+# Transaction table indexes - speeds up symbol-based lookups in build_master_log()
+create_index_trades_symbol_sql = \
+    "CREATE INDEX idx_trades_symbol ON trades(symbol)"
+create_index_trades_symbol_date_sql = \
+    "CREATE INDEX idx_trades_symbol_date ON trades(symbol, date)"
+create_index_dividends_symbol_sql = \
+    "CREATE INDEX idx_dividends_symbol ON dividends(symbol)"
+create_index_splits_symbol_sql = \
+    "CREATE INDEX idx_splits_symbol ON splits(symbol)"
+
+# History table indexes - speeds up symbol/dimension filtering
+create_index_assets_history_symbol_sql = \
+    "CREATE INDEX idx_assets_history_symbol ON assets_history(symbol)"
+create_index_assets_hypo_history_symbol_sql = \
+    "CREATE INDEX idx_assets_hypo_history_symbol ON assets_hypothetical_history(symbol)"
+create_index_sectors_history_sector_sql = \
+    "CREATE INDEX idx_sectors_history_sector ON sectors_history(sector)"
+create_index_asset_types_history_type_sql = \
+    "CREATE INDEX idx_asset_types_history_type ON asset_types_history(asset_type)"
+create_index_account_types_history_type_sql = \
+    "CREATE INDEX idx_account_types_history_type ON account_types_history(account_type)"
+create_index_geography_history_geo_sql = \
+    "CREATE INDEX idx_geography_history_geo ON geography_history(geography)"
+
+# Entities table index - speeds up symbol lookups in add_asset_info()
+create_index_entities_symbol_sql = \
+    "CREATE INDEX idx_entities_symbol ON entities(symbol)"
+
+# All transaction table indexes (for importer)
+transaction_table_indexes = [
+    create_index_trades_symbol_sql,
+    create_index_trades_symbol_date_sql,
+    create_index_dividends_symbol_sql,
+    create_index_splits_symbol_sql,
+    create_index_entities_symbol_sql,
+]
+
+# All history table indexes (for history handlers)
+history_table_indexes = {
+    'assets_history': [create_index_assets_history_symbol_sql],
+    'assets_hypothetical_history': [create_index_assets_hypo_history_symbol_sql],
+    'sectors_history': [create_index_sectors_history_sector_sql],
+    'asset_types_history': [create_index_asset_types_history_type_sql],
+    'account_types_history': [create_index_account_types_history_type_sql],
+    'geography_history': [create_index_geography_history_geo_sql],
+}

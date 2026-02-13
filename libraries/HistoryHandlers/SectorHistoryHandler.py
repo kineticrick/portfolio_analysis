@@ -5,9 +5,7 @@ import pandas as pd
 sys.path.append(os.path.join(os.path.dirname(__file__), '../..'))
 
 from libraries.db import dbcfg, MysqlDB
-from libraries.db.sql import (create_sectors_history_table_sql, 
-                              insert_update_sectors_history_sql,
-                              insert_ignore_sectors_history_sql,
+from libraries.db.sql import (create_sectors_history_table_sql,
                               read_sectors_history_query,
                               read_sectors_history_columns)
 from libraries.HistoryHandlers import BaseHistoryHandler
@@ -16,6 +14,7 @@ from libraries.helpers import gen_aggregated_historical_value
 
 class SectorHistoryHandler(BaseHistoryHandler):
     create_history_table_sql = create_sectors_history_table_sql
+    history_table_name = 'sectors_history'
     
     def __init__(self) -> None: 
         """ 
@@ -39,26 +38,23 @@ class SectorHistoryHandler(BaseHistoryHandler):
             gen_aggregated_historical_value(dimension='Sector',
                                             start_date=start_date)
             
-        column_conversion_map = {
-            'date': 'Date',
-            'sector': 'Sector',
-            'avg_percent_return': 'AvgPercentReturn',
-        }
-        
-        # Generate Insert/Update SQL for each row in sectors_historical_data_df
+        # OPTIMIZATION: Batch insert using executemany() instead of individual INSERTs
         with MysqlDB(dbcfg) as db:
-            for _, history_data in sectors_historical_data_df.iterrows():
-                insertion_dict = {}
-                for k, v in column_conversion_map.items():
-                    insertion_dict[k] = history_data[v]
-                    
-                if overwrite:
-                    insertion_sql = \
-                        insert_update_sectors_history_sql.format(**insertion_dict)
-                else: 
-                    insertion_sql = \
-                        insert_ignore_sectors_history_sql.format(**insertion_dict)
-                db.execute(insertion_sql)
+            if overwrite:
+                sql = """REPLACE INTO sectors_history (date, sector, avg_percent_return)
+                         VALUES (%s, %s, %s)"""
+            else:
+                sql = """INSERT IGNORE INTO sectors_history (date, sector, avg_percent_return)
+                         VALUES (%s, %s, %s)"""
+
+            values = [
+                (row['Date'], row['Sector'], float(row['AvgPercentReturn']))
+                for _, row in sectors_historical_data_df.iterrows()
+            ]
+
+            if values:
+                db.cursor.executemany(sql, values)
+                print(f"✓ Batch inserted {len(values)} sector history rows")
             
     def get_history(self) -> pd.DataFrame:
         """

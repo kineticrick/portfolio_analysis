@@ -14,6 +14,7 @@ from libraries.helpers import gen_assets_historical_value
 
 class AssetHistoryHandler(BaseHistoryHandler):
     create_history_table_sql = create_assets_history_table_sql
+    history_table_name = 'assets_history'
     
     def __init__(self, symbols: list=[]) -> None: 
         """ 
