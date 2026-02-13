@@ -55,7 +55,9 @@ class GeographyHistoryHandler(BaseHistoryHandler):
             if values:
                 db.cursor.executemany(sql, values)
                 print(f"✓ Batch inserted {len(values)} geography history rows")
-            
+
+        return self.get_history()
+
     def get_history(self) -> pd.DataFrame:
         """
         Get geography history from DB into dataframe
