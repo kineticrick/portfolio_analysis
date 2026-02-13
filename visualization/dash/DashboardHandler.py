@@ -335,20 +335,19 @@ class DashboardHandler:
         generate a column for % change for each symbol
         
         """
-        master_df = pd.DataFrame()
-        
         ids = list(history_df[id_column].unique())
-        
-        # Process a mini df of each symbol/sector/asset type and add to master
+
+        # Process a mini df of each symbol/sector/asset type and collect
+        id_dfs = []
         for id in ids:
             id_df = history_df.loc[history_df[id_column] == id]
             id_df = id_df.sort_values(by='Date') \
                 if 'Date' in id_df else id_df.sort_index()
             id_df = id_df.reset_index(drop=True)
             id_df = self._gen_pct_change_cols(id_df, column_names)
-            master_df = pd.concat([master_df, id_df])
+            id_dfs.append(id_df)
 
-        return master_df
+        return pd.concat(id_dfs) if id_dfs else pd.DataFrame()
     
     def expand_history_df(self, history_df: pd.DataFrame, 
                           id_column: str="Symbol") -> pd.DataFrame:
@@ -558,18 +557,13 @@ class DashboardHandler:
         portfolio_summary_df = self.current_portfolio_summary_df
         summary_df = pd.DataFrame()
         
-        # For Cost Basis, Current Value, Total Dividend, get sum grouped by dimension
-        dimension_sum_cols = ['Cost Basis', 'Current Value', 'Total Dividend']
-        summary_df = \
-            portfolio_summary_df.groupby(dimension)[dimension_sum_cols].sum()
-        summary_df = summary_df.reset_index()
-        
-        # For Dividend Yield, get mean grouped by dimension
-        dimension_mean_cols = ['Dividend Yield']
-        dimension_mean_df = \
-            portfolio_summary_df.groupby(dimension)[dimension_mean_cols].mean()
-        dimension_mean_df = dimension_mean_df.reset_index()
-        summary_df = summary_df.merge(dimension_mean_df, on=dimension)
+        # Single groupby with mixed aggregations (sum for financials, mean for yield)
+        summary_df = portfolio_summary_df.groupby(dimension).agg({
+            'Cost Basis': 'sum',
+            'Current Value': 'sum',
+            'Total Dividend': 'sum',
+            'Dividend Yield': 'mean',
+        }).reset_index()
         
         # For % of Total Portfolio, divide current value by total portfolio value
         summary_df['% of Total Portfolio'] = \

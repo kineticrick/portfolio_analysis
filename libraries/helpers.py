@@ -4,6 +4,7 @@ import sys
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
+import bisect
 import math
 import pandas as pd
 import datetime
@@ -35,6 +36,15 @@ from diskcache import Cache
 
 cache = Cache('cache')
 
+# Static mapping of event types to their query/column pairs (avoids globals() lookups)
+_EVENT_QUERIES = {
+    'buy': (master_log_buys_query, master_log_buys_columns),
+    'sell': (master_log_sells_query, master_log_sells_columns),
+    'dividend': (master_log_dividends_query, master_log_dividends_columns),
+    'split': (master_log_splits_query, master_log_splits_columns),
+    'acquisition': (master_log_acquisitions_query, master_log_acquisitions_columns),
+}
+
 def  build_master_log(symbols: list=[]) -> pd.DataFrame:
     """
     For each ASSET_EVENT, retrieve log of each event as a dataframe, then 
@@ -57,25 +67,27 @@ def  build_master_log(symbols: list=[]) -> pd.DataFrame:
                 #    "(" + ", ".join([f"'{symbol}'" for symbol in symbols]) + ")"
                 # ) if len(symbols) > 0 else ""
 
-    # Retrieve log of each event as a dataframe, then 
+    # Retrieve log of each event as a dataframe, then
     # merge each into a sorted master log
+    import warnings
+    warnings.simplefilter(action='ignore', category=FutureWarning)
+
+    event_dfs = []
     for event in ASSET_EVENTS:
-        query = globals()[f"master_log_{event}s_query"]
-        if len(symbols) > 0: 
+        query, columns = _EVENT_QUERIES[event]
+        if len(symbols) > 0:
             if "WHERE" in query:
                 query += " AND "
             else:
                 query += " WHERE "
             query += symbols_str
-            if event == 'acquisition': 
+            if event == 'acquisition':
                 query += ' OR acquirer IN ' + symbols_clause
 
-        columns = globals()[f"master_log_{event}s_columns"]
-        
         event_log_df = mysql_to_df(query, columns, dbcfg, cached=True)
-        import warnings
-        warnings.simplefilter(action='ignore', category=FutureWarning)
-        master_log_df = pd.concat([master_log_df, event_log_df], ignore_index=True)
+        event_dfs.append(event_log_df)
+
+    master_log_df = pd.concat([master_log_df] + event_dfs, ignore_index=True)
 
     # Acquisition events are stored in the master log as two separate events,
     # 'acquisition-target' and 'acquisition-acquirer'.  This allows each party to be 
@@ -171,19 +183,19 @@ def gen_hist_quantities(asset_event_log_df: pd.DataFrame,
     #   remaining_quantity: quantity of shares remaining from this purchase tranche
     #   purchase_price: price per share at time of purchase
     purchase_list = []
-    for _, event in asset_event_log_df.iterrows():
-        date = event['Date']
-        symbol = event['Symbol']
-        account_type = event['AccountType']
+    for event in asset_event_log_df.itertuples(index=False):
+        date = event.Date
+        symbol = event.Symbol
+        account_type = getattr(event, 'AccountType', None)
 
         all_events[date]['Date'] = date
         all_events[date]['Symbol'] = symbol
         all_events[date]['AccountType'] = account_type
-        
-        action = event['Action']
-        quantity = event['Quantity']
-        multiplier = event['Multiplier']
-        price_per_share = event['PricePerShare']
+
+        action = event.Action
+        quantity = event.Quantity
+        multiplier = event.Multiplier
+        price_per_share = event.PricePerShare
         
         match action:
             case 'buy':
@@ -192,17 +204,14 @@ def gen_hist_quantities(asset_event_log_df: pd.DataFrame,
                 # Add to cost basis
                 cost_basis += quantity * price_per_share
                 
-                # Add to purchase list
-                purchase_list.append({
+                # Insert into purchase list sorted by date (O(log n) vs O(n log n) re-sort)
+                entry = {
                     'Date': date,
                     'initial_quantity': quantity,
                     'remaining_quantity': quantity,
                     'purchase_price': price_per_share
-                })
-                
-                # Sort list by date to ensure that we sell/deduct 
-                # from the oldest shares first
-                purchase_list.sort(key=lambda x: x['Date'])
+                }
+                bisect.insort(purchase_list, entry, key=lambda x: x['Date'])
                 
             case 'sell':
                 total_quantity -= quantity
@@ -240,7 +249,7 @@ def gen_hist_quantities(asset_event_log_df: pd.DataFrame,
                 
             case 'acquisition-acquirer':
                 # Get the quantity of the acquisition target asset on the date of the acquisition
-                target = [event['Target']]
+                target = [getattr(event, 'Target', None)]
                 day_before = date - BDay(1)
                 target_prior_quantity_df = \
                     get_asset_quantity_by_date(target, day_before.strftime('%Y-%m-%d'))
@@ -467,44 +476,52 @@ def gen_assets_historical_value(symbols: list=[],
     
     return merged_df
 
-def gen_aggregated_historical_value(dimension: str, 
+# Module-level cache for the expensive expanded_df computation in gen_aggregated_historical_value.
+# Key: (tuple(symbols), cadence, start_date) -> expanded DataFrame with asset info merged.
+# This means when 4 dimension handlers call sequentially, only the first does the expensive work.
+_aggregation_cache = {}
+
+def gen_aggregated_historical_value(dimension: str,
                                     symbols: list=[],
                                     cadence: str='daily',
                                     start_date: str=None) -> pd.DataFrame:
     """
     Generate historical value of portfolio, aggregated by a given dimension
-    Aggregation is done by taking the average of [cadence] percent return values of 
+    Aggregation is done by taking the average of [cadence] percent return values of
     all member assets within the sector
-    (IE: AAPL return over its lifetime, from purchase to today, 
+    (IE: AAPL return over its lifetime, from purchase to today,
     averaged with MSFT's, GOOG's, etc)
     Dimension can be 'sector' or 'asset_type' or 'account_type'
-    
-    Returns: aggregated_df -> 
+
+    Returns: aggregated_df ->
     Date, [Dimension], AvgPercentReturn
     2016-02-17  Aerospace + Defense    3545.51
     2016-02-18  Aerospace + Defense    3581.38
     """
     assert(type(symbols) == list)
     assert(dimension in ['Sector', 'AssetType', 'AccountType', 'Geography'])
-    assert(cadence in CADENCE_MAP.keys()) 
-    
-    # Get all assets' historical values
-    assets_history_df = gen_assets_historical_value(symbols=symbols,
-                                                    cadence=cadence,
-                                                    start_date=start_date, 
-                                                    include_exit_date=False)
-    
-    # Add in Sector, AssetType, etc columns 
-    expanded_df = add_asset_info(assets_history_df, truncate=False)
-    
-    # Aggregate by dimension and date, then take average of daily percent 
-    # return values for each member asset within the sector
+    assert(cadence in CADENCE_MAP.keys())
+
+    # Check cache for the expensive expanded_df (shared across dimension calls)
+    cache_key = (tuple(symbols), cadence, str(start_date))
+    if cache_key not in _aggregation_cache:
+        # Get all assets' historical values
+        assets_history_df = gen_assets_historical_value(symbols=symbols,
+                                                        cadence=cadence,
+                                                        start_date=start_date,
+                                                        include_exit_date=False)
+        # Add in Sector, AssetType, etc columns
+        _aggregation_cache[cache_key] = add_asset_info(assets_history_df, truncate=False)
+
+    expanded_df = _aggregation_cache[cache_key]
+
+    # Aggregate by dimension and date — this is the cheap part
     aggregated_df = expanded_df.groupby(['Date', dimension])['PercentReturn'].mean()
     aggregated_df = aggregated_df.reset_index()
     aggregated_df = aggregated_df.rename(columns={'PercentReturn':'AvgPercentReturn'})
-    aggregated_df = aggregated_df.sort_values(by=[dimension, 'Date'], 
+    aggregated_df = aggregated_df.sort_values(by=[dimension, 'Date'],
                                               ascending=True)
-    
+
     return aggregated_df
 
 def get_portfolio_summary() -> pd.DataFrame:
@@ -523,30 +540,40 @@ def get_portfolio_summary() -> pd.DataFrame:
     
     return portfolio_summary_df
 
+# Module-level cache for entity data (eliminates redundant DB deserializations)
+_entities_df_cache = None
+
+def _get_entities_df() -> pd.DataFrame:
+    """Load entities once, return a copy each call (copy needed because truncation mutates)."""
+    global _entities_df_cache
+    if _entities_df_cache is None:
+        _entities_df_cache = mysql_to_df(
+            read_entities_table_query, read_entities_table_columns,
+            dbcfg, cached=True)
+    return _entities_df_cache.copy()
+
 def add_asset_info(asset_df: pd.DataFrame, truncate=True) -> pd.DataFrame:
     """
     Given a dataframe of assets, add additional information* about each asset
     Info = Company Name, Sector, AssetType (Common Stock, ETF, REIT), Geography
-    
+
     If truncate is True, all strings will be truncated to 20 characters
-    
-    Returns: asset_df 
+
+    Returns: asset_df
         {Original DF}, Company Name, Sector, AssetType
     """
-    
+
     assert('Symbol' in asset_df.columns)
-    
-    asset_info_df = mysql_to_df(
-        read_entities_table_query, read_entities_table_columns, 
-        dbcfg, cached=True)
-        
+
+    asset_info_df = _get_entities_df()
+
     # Truncates long strings to 20 characters, for better display
     if truncate:
         for col in asset_info_df.select_dtypes(include='object'):
             asset_info_df[col] = asset_info_df[col].str.slice(0, 25)
-        
+
     asset_df = asset_df.merge(asset_info_df, on='Symbol', how='left')
-    
+
     return asset_df
 
 # Cache for 1 hour, since it takes a bit of time to get current prices for 

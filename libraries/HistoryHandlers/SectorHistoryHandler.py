@@ -55,7 +55,9 @@ class SectorHistoryHandler(BaseHistoryHandler):
             if values:
                 db.cursor.executemany(sql, values)
                 print(f"✓ Batch inserted {len(values)} sector history rows")
-            
+
+        return self.get_history()
+
     def get_history(self) -> pd.DataFrame:
         """
         Get sector history from DB into dataframe

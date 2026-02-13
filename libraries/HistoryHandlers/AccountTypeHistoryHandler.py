@@ -62,7 +62,9 @@ class AccountTypeHistoryHandler(BaseHistoryHandler):
             if values:
                 db.cursor.executemany(sql, values)
                 print(f"✓ Batch inserted {len(values)} account type history rows")
-            
+
+        return self.get_history()
+
     def get_history(self) -> pd.DataFrame:
         """
         Get account_type history from DB into dataframe

@@ -55,7 +55,9 @@ class AssetTypeHistoryHandler(BaseHistoryHandler):
             if values:
                 db.cursor.executemany(sql, values)
                 print(f"✓ Batch inserted {len(values)} asset type history rows")
-            
+
+        return self.get_history()
+
     def get_history(self) -> pd.DataFrame:
         """
         Get asset_type history from DB into dataframe
