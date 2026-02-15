@@ -16,6 +16,7 @@ normalized_hypo_fig = px.line(
     line_dash=normalized_hypo_df['Sector'],
 )
 normalized_hypo_fig.update_layout(height=800)
+normalized_hypo_fig.update_yaxes(ticksuffix="%")
 
 sectors = normalized_hypo_df['Sector'].unique().tolist()
 sectors = [{'label': x, 'value': x} for x in sectors]
@@ -77,6 +78,7 @@ def update_normalized_hypo_graph(sectors, assets):
     )
         
     normalized_hypo_fig.update_layout(transition_duration=500, height=800)
+    normalized_hypo_fig.update_yaxes(ticksuffix="%")
     return normalized_hypo_fig
 
 hypotheticals_tab = dbc.Container(

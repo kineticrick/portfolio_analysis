@@ -114,6 +114,7 @@ def update_account_types_hist_graph(selected_rows, interval):
         # line_dash=account_types_history_df['AccountType'],
     )
     account_types_history_fig.update_layout(height=800)
+    account_types_history_fig.update_yaxes(ticksuffix="%")
 
     return account_types_history_fig
 

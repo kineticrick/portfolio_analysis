@@ -207,7 +207,7 @@ Uses `port_hist_df['Value'][0]` instead of `port_hist_df['Value'].iloc[0]` — f
 |-----|-------|--------|
 | ~~Change default tab to Portfolio~~ | `portfolio_dashboard.py` | Done |
 | ~~Add `dcc.Loading` wrapper~~ | `portfolio_dashboard.py` | Done |
-| Format Y-axis as percentage | `fig.update_yaxes(tickformat=".1%")` | Open |
+| ~~Format Y-axis as percentage~~ | 6 tab files (7 charts) | Done |
 | ~~Use `iloc[0]` not `[0]`~~ | `portfolio_tab.py` | Done |
 | ~~Replace `paper_bgcolor='lightblue'`~~ | `portfolio_tab.py` | Done |
 | ~~Add `rangeslider`~~ | `portfolio_tab.py` | Done |
