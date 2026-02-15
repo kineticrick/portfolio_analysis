@@ -410,99 +410,73 @@ class DashboardHandler:
         """
         
         # If we're dealing with hypotheticals, split into actuals and hypotheticals
-        if hypotheticals and "Owned" in history_df: 
+        if hypotheticals and "Owned" in history_df:
             actuals_df = history_df.loc[history_df['Owned'] == 'Actual']
             hypos_df = history_df.loc[history_df['Owned'] == 'Hypothetical']
-        # Otherwise we're dealing with only actuals (a currently owned asset), 
+        # Otherwise we're dealing with only actuals (a currently owned asset),
         # so the entire history is actuals
-        else: 
-            actuals_df = history_df 
-            
-        stats_data = []
-        symbols = list(actuals_df['Symbol'].unique())
-        
-        # For each symbol in the history dataframe, process the actuals as both/either
-        # the entirety of the history (in which case we get only the default stats), or
-        # as just the actuals, followed by the hypotheticals (which get their own set of
-        # additional stats)
-        for symbol in symbols: 
-            # Get the actuals for the symbol, and sort by date
-            symbol_actuals_df = actuals_df.loc[actuals_df['Symbol'] == symbol]
-            symbol_actuals_df = symbol_actuals_df.sort_values(by='Date')
-            symbol_actuals_df = symbol_actuals_df.reset_index(drop=True)
-            
-            # Get key milestone prices
-            enter_price = symbol_actuals_df['ClosingPrice'].iloc[0]
-            latest_actuals_price = symbol_actuals_df['ClosingPrice'].iloc[-1]
-            max_actuals_price = symbol_actuals_df['ClosingPrice'].max()
-            
-            # Return from acquisition to last price during ownership
-            # (if currently owned, this is now. If sold in the past, this is exit date)
-            actuals_enter_to_latest = round(
-                (latest_actuals_price - enter_price) / enter_price * 100, 2)
-    
-            # Return from acquisition to max price during ownership 
-            actuals_enter_to_max = round(
-                (max_actuals_price - enter_price) / enter_price * 100, 2)
+        else:
+            actuals_df = history_df
 
-            # Store in dict, to be later converted to dataframe
-            stats_dict = {
-                'Symbol': symbol,
-                'Actuals Ret.(Enter/Latest)%': actuals_enter_to_latest,
-                'Actuals Ret.(Enter/Max)%': actuals_enter_to_max,
-            }
-            
-            #TODO: Add other stats, like stdDev, sharpe, etc
+        # Vectorized: compute per-symbol price stats in one pass
+        sorted_actuals = actuals_df.sort_values(by=['Symbol', 'Date'])
+        actuals_price_stats = sorted_actuals.groupby('Symbol')['ClosingPrice'].agg(
+            enter_price='first', latest_price='last', max_price='max'
+        )
 
-            # If we're dealing with hypotheticals, add in the hypotheticals stats
-            if hypotheticals: 
-                symbol_hypos_df = hypos_df.loc[hypos_df['Symbol'] == symbol]
-                if symbol_hypos_df.empty:
-                    continue
-                
-                symbol_hypos_df = symbol_hypos_df.sort_values(by='Date')
-                symbol_hypos_df = symbol_hypos_df.reset_index(drop=True)
-                
-                exit_price = symbol_hypos_df['ClosingPrice'].iloc[0]
-                latest_hypo_price = symbol_hypos_df['ClosingPrice'].iloc[-1]
-                max_hypo_price = symbol_hypos_df['ClosingPrice'].max()
+        # Compute return percentages vectorized
+        stats_df = actuals_price_stats.copy()
+        stats_df['Actuals Ret.(Enter/Latest)%'] = round(
+            (stats_df['latest_price'] - stats_df['enter_price'])
+            / stats_df['enter_price'] * 100, 2)
+        stats_df['Actuals Ret.(Enter/Max)%'] = round(
+            (stats_df['max_price'] - stats_df['enter_price'])
+            / stats_df['enter_price'] * 100, 2)
 
-                # Return from acquisition to current price (which is end of 
-                # hypothetical history, since it's unowned)
-                hypos_enter_to_current = round(
-                    (latest_hypo_price - enter_price) / enter_price * 100, 2)                
-           
-                # Return from sale to current price
-                hypos_exit_to_current = round(
-                    (latest_hypo_price - exit_price) / exit_price * 100, 2)
-           
-                # Return from acquisition to max price AFTER sale
-                hypos_enter_to_max = round(
-                    (max_hypo_price - enter_price) / enter_price * 100, 2)
-           
-                # Return from sale to max price AFTER sale
-                hypos_exit_to_max = round(
-                    (max_hypo_price - exit_price) / exit_price * 100, 2)
+        #TODO: Add other stats, like stdDev, sharpe, etc
 
-                # Store in dict
-                stats_dict['Hypo Ret.(Enter/Current)%'] = \
-                    hypos_enter_to_current
-                stats_dict['Hypo Ret.(Exit/Current)%'] = \
-                    hypos_exit_to_current
-                stats_dict['Hypo Ret.(Enter/Max)%'] = \
-                    hypos_enter_to_max
-                stats_dict['Hypo Ret.(Exit/Max)%']= \
-                    hypos_exit_to_max
-                
-            stats_data.append(stats_dict)
-        
-        stats_df = pd.DataFrame(stats_data)
-        
+        # If we're dealing with hypotheticals, compute hypo stats vectorized
+        if hypotheticals:
+            sorted_hypos = hypos_df.sort_values(by=['Symbol', 'Date'])
+            hypos_price_stats = sorted_hypos.groupby('Symbol')['ClosingPrice'].agg(
+                exit_price='first', latest_hypo_price='last', max_hypo_price='max'
+            )
+
+            # Join actuals enter_price with hypo stats
+            hypo_stats = hypos_price_stats.join(actuals_price_stats[['enter_price']])
+
+            hypo_stats['Hypo Ret.(Enter/Current)%'] = round(
+                (hypo_stats['latest_hypo_price'] - hypo_stats['enter_price'])
+                / hypo_stats['enter_price'] * 100, 2)
+            hypo_stats['Hypo Ret.(Exit/Current)%'] = round(
+                (hypo_stats['latest_hypo_price'] - hypo_stats['exit_price'])
+                / hypo_stats['exit_price'] * 100, 2)
+            hypo_stats['Hypo Ret.(Enter/Max)%'] = round(
+                (hypo_stats['max_hypo_price'] - hypo_stats['enter_price'])
+                / hypo_stats['enter_price'] * 100, 2)
+            hypo_stats['Hypo Ret.(Exit/Max)%'] = round(
+                (hypo_stats['max_hypo_price'] - hypo_stats['exit_price'])
+                / hypo_stats['exit_price'] * 100, 2)
+
+            # Merge hypo columns into stats_df (only for symbols that have hypo data)
+            hypo_cols = ['Hypo Ret.(Enter/Current)%', 'Hypo Ret.(Exit/Current)%',
+                         'Hypo Ret.(Enter/Max)%', 'Hypo Ret.(Exit/Max)%']
+            stats_df = stats_df.join(hypo_stats[hypo_cols])
+
+            # Drop symbols with no hypothetical data
+            stats_df = stats_df.dropna(subset=hypo_cols, how='all')
+
+        # Clean up: drop intermediate columns, reset index to get Symbol as column
+        stats_df = stats_df.drop(
+            columns=['enter_price', 'latest_price', 'max_price'],
+            errors='ignore')
+        stats_df = stats_df.reset_index()
+
         sort_col = 'Hypo Ret.(Exit/Current)%' \
             if hypotheticals else 'Actuals Ret.(Enter/Latest)%'
         stats_df = stats_df.sort_values(by=sort_col, ascending=False)
         stats_df = add_asset_info(stats_df)
-        
+
         return stats_df
     
     def _gen_assets_summary(self) -> pd.DataFrame:
