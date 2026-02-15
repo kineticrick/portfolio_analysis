@@ -6,7 +6,7 @@ import time
 enter = time.perf_counter()
 
 import dash_bootstrap_components as dbc
-from dash import Dash
+from dash import Dash, dcc
 
 from libraries.globals import MYSQL_CACHE_ENABLED, MYSQL_CACHE_TTL
 
@@ -29,28 +29,28 @@ from visualization.dash.portfolio_dashboard.tabs import (
 
 
 print("Loading Portfolio Tabs...")
-app.layout = \
+app.layout = dcc.Loading(
     dbc.Tabs(
         [
-            dbc.Tab(label='Portfolio', tab_id='portfolio-dash-tab', 
+            dbc.Tab(label='Portfolio', tab_id='portfolio-dash-tab',
                     children=portfolio_tab),
-            dbc.Tab(label='Sectors', tab_id='sectors-dash-tab', 
+            dbc.Tab(label='Sectors', tab_id='sectors-dash-tab',
                     children=sectors_tab),
-            dbc.Tab(label='Asset Types', tab_id='asset-types-dash-tab', 
+            dbc.Tab(label='Asset Types', tab_id='asset-types-dash-tab',
                     children=asset_types_tab),
-            dbc.Tab(label='Account Types', tab_id='account-types-dash-tab', 
+            dbc.Tab(label='Account Types', tab_id='account-types-dash-tab',
                     children=account_types_tab),
-            dbc.Tab(label='Geography', tab_id='geography-dash-tab', 
+            dbc.Tab(label='Geography', tab_id='geography-dash-tab',
                     children=geography_tab),
-            dbc.Tab(label='Assets', tab_id='assets-dash-tab', 
+            dbc.Tab(label='Assets', tab_id='assets-dash-tab',
                     children=assets_tab),
-        #     Removed hypotheticals_tab from tabs
-            dbc.Tab(label='Hypotheticals', tab_id='hypotheticals-dash-tab', 
+            dbc.Tab(label='Hypotheticals', tab_id='hypotheticals-dash-tab',
                     children=hypotheticals_tab),
-        ], 
-        id='tabs', 
-        active_tab='assets-dash-tab'
+        ],
+        id='tabs',
+        active_tab='portfolio-dash-tab'
     )
+)
 
 print(f'Portfolio Dashboard loaded in {time.perf_counter() - enter} seconds')
 

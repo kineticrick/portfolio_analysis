@@ -110,29 +110,28 @@ Increased MySQL connection pool from 5 to 10 concurrent connections.
 
 Historical prices: 12h → 24h (stable data, rarely changes). Current prices: 1h → 15min (more relevant for intraday).
 
+#### UX Quick Wins
+**Commit:** (round 4) | **Impact:** Improved usability
+
+- Default tab changed from Assets to Portfolio (`portfolio_dashboard.py`)
+- Fixed `port_hist_df['Value'][0]` → `port_hist_df['Value'].iloc[0]` bug (`portfolio_tab.py`)
+- Removed hardcoded `paper_bgcolor='lightblue'` (`portfolio_tab.py`)
+- Added `dcc.Loading` wrapper around tabs for loading state feedback (`portfolio_dashboard.py`)
+- Added `rangeslider` to portfolio history chart (`portfolio_tab.py`)
+
 ---
 
 ### Remaining: Medium Impact
 
 #### 1. Asset History Loaded for ALL Ever-Owned Assets
-**File:** `visualization/dash/DashboardHandler.py:41` | **Estimated speedup:** Reduces DB read size
+**File:** `visualization/dash/DashboardHandler.py:41`
 
-**Problem:** `AssetHistoryHandler()` on line 41 loads history for every asset ever owned (~200+), then line 53-54 filters down to current portfolio (~50 assets). The DB query should filter by symbol upfront.
-
-**Fix:** Pass current portfolio symbols to `AssetHistoryHandler`:
-```python
-portfolio_symbols = self.current_portfolio_summary_df['Symbol'].tolist()
-ah = AssetHistoryHandler(symbols=portfolio_symbols)
-```
-
-Note: This requires reordering `DashboardHandler.__init__()` so `get_portfolio_current_value()` is called before `AssetHistoryHandler()`.
+**Status:** Investigated, deferred. `AssetHypotheticalHistoryHandler` requires full asset history (including exited assets) for hypothetical analysis. Restricting `AssetHistoryHandler` to portfolio symbols would require a second handler for exited assets, adding complexity with minimal gain since DB reads are cached and Python-level filtering is cheap (~30K extra rows out of 110K).
 
 #### 2. Calendar Days Instead of Business Days
 **File:** `libraries/yfinance_helpers/yfinancelib.py:143`
 
-**Problem:** `pd.date_range(start, end, freq='D')` creates entries for all calendar days, then forward-fills weekends/holidays. Creates ~30% unnecessary entries.
-
-**Fix:** Use `pd.bdate_range(start, end)` for business days only. Requires coordinated changes across `gen_hist_quantities()` (which also uses calendar days), price/quantity merge logic, and milestone date lookups to avoid breaking weekend date references.
+**Status:** Deferred. Requires coordinated changes across `gen_hist_quantities()` (which also uses calendar days), price/quantity merge logic, and milestone date lookups to avoid breaking weekend date references. Risk outweighs the ~30% row reduction benefit.
 
 ---
 
@@ -204,14 +203,14 @@ Uses `port_hist_df['Value'][0]` instead of `port_hist_df['Value'].iloc[0]` — f
 
 ### Quick Wins
 
-| Fix | Where | Effort |
+| Fix | Where | Status |
 |-----|-------|--------|
-| Change default tab to Portfolio | `portfolio_dashboard.py:52` | 1 line |
-| Add `dcc.Loading` wrapper | `portfolio_dashboard.py` around tabs | 2 lines |
-| Format Y-axis as percentage | `fig.update_yaxes(tickformat=".1%")` | 1 line per chart |
-| Use `iloc[0]` not `[0]` | `portfolio_tab.py:38` | 1 line |
-| Replace `paper_bgcolor='lightblue'` | `portfolio_tab.py:109` | 1 line |
-| Add `rangeslider={'visible': True}` | `portfolio_tab.py` chart config | 1 line |
+| ~~Change default tab to Portfolio~~ | `portfolio_dashboard.py` | Done |
+| ~~Add `dcc.Loading` wrapper~~ | `portfolio_dashboard.py` | Done |
+| Format Y-axis as percentage | `fig.update_yaxes(tickformat=".1%")` | Open |
+| ~~Use `iloc[0]` not `[0]`~~ | `portfolio_tab.py` | Done |
+| ~~Replace `paper_bgcolor='lightblue'`~~ | `portfolio_tab.py` | Done |
+| ~~Add `rangeslider`~~ | `portfolio_tab.py` | Done |
 
 ---
 

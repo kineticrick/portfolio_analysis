@@ -34,8 +34,8 @@ def update_port_hist_graph(interval):
         port_hist_df['Value'] = port_hist_df['Value'].astype(float)
 
         port_hist_df['perc_change'] = \
-            round((port_hist_df['Value'] - port_hist_df['Value'][0]) /
-                  port_hist_df['Value'][0] * 100, 2)
+            round((port_hist_df['Value'] - port_hist_df['Value'].iloc[0]) /
+                  port_hist_df['Value'].iloc[0] * 100, 2)
 
         fig = px.line(
             port_hist_df,
@@ -45,7 +45,8 @@ def update_port_hist_graph(interval):
             markers=True,
         )
 
-        fig.update_layout(transition_duration=500, hovermode='y unified')
+        fig.update_layout(transition_duration=500, hovermode='y unified',
+                          xaxis=dict(rangeslider=dict(visible=True)))
         return fig
     except Exception as e:
         print(f"Error in update_port_hist_graph: {e}")
@@ -106,7 +107,6 @@ def update_portfolio_value(interval):
             ))
 
         port_value_fig.update_layout(
-            paper_bgcolor = "lightblue",
             height=200,
             margin=dict(l=10, r=10, t=10, b=10),
         )
