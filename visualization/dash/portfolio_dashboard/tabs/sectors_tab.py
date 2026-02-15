@@ -5,4 +5,5 @@ sectors_tab = create_dimension_tab(
     column_name="Sector",
     summary_df_attr="sectors_summary_df",
     history_df_attr="sectors_history_df",
+    tab_id="sectors-dash-tab",
 )

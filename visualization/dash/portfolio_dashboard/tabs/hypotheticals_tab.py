@@ -1,40 +1,80 @@
-from dash import (callback, dcc, Input, Output)
+from dash import (callback, clientside_callback, dcc, Input, Output, no_update)
 import dash_ag_grid as dag
 import plotly.express as px
+import plotly.graph_objs as go
 
 from visualization.dash.portfolio_dashboard.globals import *
 
-import dash_bootstrap_components as dbc
+import dash_mantine_components as dmc
 
-normalized_hypo_df = DASH_HANDLER.exits_hypotheticals_history_df
-normalized_hypo_df = DASH_HANDLER.expand_history_df(normalized_hypo_df)
+# Module-level cache populated on first callback execution
+_hypo_cache = {}
 
-normalized_hypo_fig = px.line(
-    normalized_hypo_df,
-    x=normalized_hypo_df['Date'],
-    y=normalized_hypo_df['ClosingPrice % Change'],
-    color=normalized_hypo_df['Symbol'],
-    line_dash=normalized_hypo_df['Sector'],
-)
-normalized_hypo_fig.update_layout(height=800)
-normalized_hypo_fig.update_yaxes(ticksuffix="%")
+def _load_hypo_data():
+    """Load and cache hypothetical data on first access."""
+    if 'normalized_hypo_df' not in _hypo_cache:
+        print("Loading hypothetical tab data...")
+        normalized_hypo_df = DASH_HANDLER.exits_hypotheticals_history_df
+        normalized_hypo_df = DASH_HANDLER.expand_history_df(normalized_hypo_df)
+        _hypo_cache['normalized_hypo_df'] = normalized_hypo_df
 
-sectors = normalized_hypo_df['Sector'].unique().tolist()
-sectors = [{'label': x, 'value': x} for x in sectors]
-sectors = sorted(sectors, key=lambda x: x['label'])
+        sectors = normalized_hypo_df['Sector'].unique().tolist()
+        sectors = [{'label': x, 'value': x} for x in sectors]
+        sectors = sorted(sectors, key=lambda x: x['label'])
+        _hypo_cache['sectors'] = sectors
 
-asset_hypo_df = DASH_HANDLER.assets_hypothetical_history_df
-asset_hypo_stats_df = DASH_HANDLER.gen_historical_stats(asset_hypo_df, hypotheticals=True)
-asset_hypo_stats_df = asset_hypo_stats_df[['Name', 'Symbol', 'Sector', 'Hypo Ret.(Exit/Current)%']]
+        asset_hypo_df = DASH_HANDLER.assets_hypothetical_history_df
+        asset_hypo_stats_df = DASH_HANDLER.gen_historical_stats(
+            asset_hypo_df, hypotheticals=True)
+        asset_hypo_stats_df = asset_hypo_stats_df[
+            ['Name', 'Symbol', 'Sector', 'Hypo Ret.(Exit/Current)%']]
+        _hypo_cache['asset_hypo_stats_df'] = asset_hypo_stats_df
+        _hypo_cache['hypo_column_defs'] = [
+            {"field": col, "sortable": True, "filter": True}
+            for col in asset_hypo_stats_df.columns
+        ]
+        print("✓ Hypothetical tab data loaded")
+    return _hypo_cache
 
-# Build ag-grid column defs for the hypotheticals stats table
-hypo_column_defs = [{"field": col, "sortable": True, "filter": True}
-                    for col in asset_hypo_stats_df.columns]
+
+@callback(
+    Output('hypo-sector-select-dropdown', 'options'),
+    Output('hypos-global-table', 'columnDefs'),
+    Output('hypos-global-table', 'rowData'),
+    Output('hypothetical-normalized-history-graph', 'figure'),
+    Input('tabs', 'value'))
+def initialize_hypotheticals_tab(active_tab):
+    if active_tab != 'hypotheticals-dash-tab':
+        return no_update, no_update, no_update, no_update
+
+    data = _load_hypo_data()
+    normalized_hypo_df = data['normalized_hypo_df']
+
+    fig = px.line(
+        normalized_hypo_df,
+        x=normalized_hypo_df['Date'],
+        y=normalized_hypo_df['ClosingPrice % Change'],
+        color=normalized_hypo_df['Symbol'],
+        line_dash=normalized_hypo_df['Sector'],
+    )
+    fig.update_layout(height=800)
+    fig.update_yaxes(ticksuffix="%")
+
+    return (
+        data['sectors'],
+        data['hypo_column_defs'],
+        data['asset_hypo_stats_df'].to_dict('records'),
+        fig,
+    )
+
 
 @callback(
     Output('asset-select-dropdown', 'options'),
     Input('hypo-sector-select-dropdown', 'value'))
 def update_asset_dropdown_options(sectors):
+    data = _load_hypo_data()
+    normalized_hypo_df = data['normalized_hypo_df']
+
     if not sectors:
         df = normalized_hypo_df
     else:
@@ -54,21 +94,28 @@ def update_asset_dropdown_options(sectors):
 
     return assets
 
-@callback(
+# Phase 2: Clientside callback — no server round-trip needed
+clientside_callback(
+    """
+    function(sectors, options) {
+        if (!sectors || !sectors.length) return null;
+        return options.map(function(x) { return x.value; });
+    }
+    """,
     Output('asset-select-dropdown', 'value'),
     Input('hypo-sector-select-dropdown', 'value'),
-    Input('asset-select-dropdown', 'options'))
-def set_asset_dropdown_values(sectors, available_options):
-    if not sectors:
-        return None
-    else:
-        return [x['value'] for x in available_options]
+    Input('asset-select-dropdown', 'options'),
+)
 
 @callback(
-    Output('hypothetical-normalized-history-graph', 'figure'),
+    Output('hypothetical-normalized-history-graph', 'figure', allow_duplicate=True),
     Input('hypo-sector-select-dropdown', 'value'),
-    Input('asset-select-dropdown', 'value'))
+    Input('asset-select-dropdown', 'value'),
+    prevent_initial_call=True)
 def update_normalized_hypo_graph(sectors, assets):
+    data = _load_hypo_data()
+    normalized_hypo_df = data['normalized_hypo_df']
+
     if not sectors and not assets:
         df = normalized_hypo_df
     else:
@@ -86,54 +133,51 @@ def update_normalized_hypo_graph(sectors, assets):
     normalized_hypo_fig.update_yaxes(ticksuffix="%")
     return normalized_hypo_fig
 
-hypotheticals_tab = dbc.Container(
+hypotheticals_tab = dmc.Container(
     [
-        dbc.Row([
-            dbc.Col(
+        dmc.Grid([
+            dmc.GridCol(
                 dcc.Dropdown(
-                    options=sectors,
+                    options=[],
                     id='hypo-sector-select-dropdown',
                     placeholder='Select sector(s)',
                     multi=True,
                 ),
-                width={'offset': 1, 'size': 3}
+                span=3, offset=1,
             ),
-            dbc.Col(
+            dmc.GridCol(
                 dcc.Dropdown(
                     id='asset-select-dropdown',
                     placeholder='Select asset(s)',
                     multi=True,
                 ),
-                width={'offset': 1, 'size': 3}
+                span=3, offset=1,
             ),
-            ],
-            justify='start'
-        ),
-
-        dbc.Row([
-            dbc.Col(
-                dbc.Card(
+        ]),
+        dmc.Grid([
+            dmc.GridCol(
+                dmc.Paper(
                     dcc.Graph(
                         id='hypothetical-normalized-history-graph',
-                        figure=normalized_hypo_fig
                     ),
+                    shadow="sm", p="md",
                 ),
-                width={'size': 9}
+                span=9,
             ),
-            dbc.Col(
-                dbc.Card(
+            dmc.GridCol(
+                dmc.Paper(
                     dag.AgGrid(
                         id='hypos-global-table',
-                        columnDefs=hypo_column_defs,
-                        rowData=asset_hypo_stats_df.to_dict('records'),
+                        columnDefs=[],
+                        rowData=[],
                         defaultColDef={"resizable": True},
                         dashGridOptions={"domLayout": "autoHeight"},
                     ),
+                    shadow="sm", p="md",
                 ),
-                width={'size': 3}
-            ),],
-            justify='start'
-        ),
+                span=3,
+            ),
+        ]),
     ],
-    fluid=True
+    fluid=True,
 )

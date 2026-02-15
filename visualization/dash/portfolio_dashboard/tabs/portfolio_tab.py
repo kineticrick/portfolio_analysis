@@ -5,7 +5,7 @@ import plotly.express as px
 import pandas as pd
 from visualization.dash.portfolio_dashboard.globals import *
 from pandas.tseries.offsets import DateOffset
-import dash_bootstrap_components as dbc
+import dash_mantine_components as dmc
 
 # Build column defs for the static milestones table
 milestones_column_defs = [{"field": col, "sortable": True, "filter": True}
@@ -119,18 +119,18 @@ def update_portfolio_value(interval):
         print(f"Error in update_portfolio_value: {e}")
         return go.Figure().update_layout(title=f"Error: {str(e)}")
 
-portfolio_tab = dbc.Container(
+portfolio_tab = dmc.Container(
     [
-        dbc.Row(
-            dbc.Col(
+        dmc.Grid(
+            dmc.GridCol(
                 html.H1("Portfolio Dashboard"),
-                width={'size': 6, 'offset': 3}
+                span=6, offset=3,
             ),
-            justify='center'
+            justify='center',
         ),
         html.Hr(),
-        dbc.Row([
-            dbc.Col(
+        dmc.Grid([
+            dmc.GridCol(
                 html.Div([
                     "Select period:",
                     dcc.Dropdown(
@@ -138,23 +138,23 @@ portfolio_tab = dbc.Container(
                         options=INTERVALS,
                         value=PORTFOLIO_DEFAULT_INTERVAL,
                     ),
-                ],),
-                width={'size': 1, 'offset': 8}
-            ),],
-            justify='start',
-        ),
-        dbc.Row([
-            dbc.Col(
-                dbc.Card(
+                ]),
+                span=1, offset=8,
+            ),
+        ]),
+        dmc.Grid([
+            dmc.GridCol(
+                dmc.Paper(
                     dcc.Graph(
                         id='portfolio-history-graph',
                     ),
+                    shadow="sm", p="md",
                 ),
-                width={'size': 9}
+                span=9,
             ),
-            dbc.Col(
-                dbc.Card(
-                    dbc.Stack([
+            dmc.GridCol(
+                dmc.Paper(
+                    dmc.Stack([
                         dcc.Graph(
                             id='portfolio-value-scalar',
                         ),
@@ -165,16 +165,16 @@ portfolio_tab = dbc.Container(
                             defaultColDef={"resizable": True},
                             dashGridOptions={"domLayout": "autoHeight"},
                         )],
-                        gap=3
+                        gap="md",
                     ),
+                    shadow="sm", p="md",
                 ),
-                width={'size': 3}
-            )],
-            justify='start'
-        ),
-        dbc.Row([
-            dbc.Col(
-            dbc.Card(
+                span=3,
+            ),
+        ]),
+        dmc.Grid([
+            dmc.GridCol(
+                dmc.Paper(
                     dag.AgGrid(
                         id='winners-table',
                         columnDefs=[],
@@ -182,11 +182,12 @@ portfolio_tab = dbc.Container(
                         defaultColDef={"resizable": True},
                         dashGridOptions={"domLayout": "autoHeight"},
                     ),
+                    shadow="sm", p="md",
                 ),
-                width={'size': 3, 'offset': 1},
+                span=3, offset=1,
             ),
-            dbc.Col(
-            dbc.Card(
+            dmc.GridCol(
+                dmc.Paper(
                     dag.AgGrid(
                         id='losers-table',
                         columnDefs=[],
@@ -194,11 +195,11 @@ portfolio_tab = dbc.Container(
                         defaultColDef={"resizable": True},
                         dashGridOptions={"domLayout": "autoHeight"},
                     ),
+                    shadow="sm", p="md",
                 ),
-                width={'size': 3, 'offset': 1},
-            ),],
-            justify='start'
-        ),
+                span=3, offset=1,
+            ),
+        ]),
     ],
-    fluid=True
+    fluid=True,
 )
