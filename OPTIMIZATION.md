@@ -8,7 +8,6 @@
 
 - [Part 1: Performance Optimizations](#part-1-performance-optimizations)
   - [Completed](#completed)
-  - [Remaining: High Impact](#remaining-high-impact)
   - [Remaining: Medium Impact](#remaining-medium-impact)
 - [Part 2: Visualization / UX Improvements](#part-2-visualization--ux-improvements)
   - [Architectural Issues](#architectural-issues)
@@ -61,47 +60,64 @@ Indexes are created idempotently via `MysqlDB.create_index_safe()` (catches MySQ
 
 ---
 
-### Remaining: High Impact
+#### `gen_hist_quantities()` O(n²) Fix
+**Commit:** `3979fb4` | **Impact:** 3-5x faster iteration
 
-#### 1. `gen_hist_quantities()` is O(n^2)
-**File:** `libraries/helpers.py:174` | **Estimated speedup:** 5-10x
+Replaced `iterrows()` with `itertuples(index=False)` for faster row iteration. Replaced `purchase_list.sort()` (O(n log n) on every buy) with `bisect.insort()` (O(log n) per insert).
 
-**Problem:** Uses `iterrows()` to loop over every transaction event (slow — 10-100x slower than vectorized ops for large DataFrames). Inside the loop, `purchase_list.sort()` is called on every buy event, re-sorting the entire list each time — O(n^2) behavior overall.
+#### Aggregation Cache for Dimension Handlers
+**Commit:** `3979fb4` | **Impact:** ~4x faster dimension summary generation
 
-```python
-for _, event in asset_event_log_df.iterrows():  # slow iterrows
-    # ... 85 lines of per-row processing ...
-    purchase_list.append({...})
-    purchase_list.sort(key=lambda x: x['Date'])  # re-sort on every buy!
-```
+Added module-level `_aggregation_cache` in `gen_aggregated_historical_value()` so the expensive `gen_assets_historical_value()` + `add_asset_info()` computation is done once and reused across all 4 dimension handlers (Sector, AssetType, AccountType, Geography).
 
-**Fix options:**
-- Replace `purchase_list.sort()` with `bisect.insort()` to maintain sorted order on insert (O(log n) per insert instead of O(n log n))
-- Consider vectorizing the quantity/cost-basis tracking where possible, though the stateful nature of the logic (running totals, split handling) makes full vectorization complex
-- At minimum, replace `iterrows()` with `itertuples()` for 3-5x speedup on the iteration itself
+#### Entity Data Cache in `add_asset_info()`
+**Commit:** `3979fb4` | **Impact:** Eliminates 5+ redundant DB deserializations per session
 
-This function is on the critical path for all history generation.
+Added module-level `_entities_df_cache` and `_get_entities_df()` helper. Entities table is loaded from DB once per session instead of on every call.
 
-#### 2. Redundant Computation in `DashboardHandler.__init__()`
-**File:** `visualization/dash/DashboardHandler.py` | **Estimated speedup:** ~4x for dimension summaries
+#### `build_master_log()` Cleanup
+**Commit:** `3979fb4` | **Impact:** ~15-20% faster
 
-**Problem A — `gen_aggregated_historical_value()` called 4 times:**
-Each dimension handler (Sector, AssetType, AccountType, Geography) calls `gen_aggregated_historical_value()` independently. Each call:
-1. Re-fetches ALL historical data via `gen_assets_historical_value()`
-2. Expands it with `add_asset_info()` (entity metadata merge)
-3. Groups by one dimension
+Replaced `globals()` lookups with static `_EVENT_QUERIES` dict. Replaced concat-in-loop with collect-then-concat pattern.
 
-This means the full asset history is fetched and expanded 4 times, then grouped 4 different ways.
+#### `_gen_summary_df()` Single GroupBy
+**Commit:** `3979fb4` | **Impact:** Minor cleanup
 
-**Fix:** Compute all dimensions in a single pass:
-```python
-expanded_df = add_asset_info(assets_history_df)
-for dimension in ['Sector', 'AssetType', 'AccountType', 'Geography']:
-    results[dimension] = expanded_df.groupby(['Date', dimension])['PercentReturn'].mean()
-```
+Replaced double-groupby (sum + mean + merge) with single `.agg()` call.
 
-**Problem B — Asset history loaded for ALL ever-owned assets:**
-`AssetHistoryHandler()` on line 41 loads history for every asset ever owned (~200+), then line 53-54 filters down to current portfolio (~50 assets). The DB query should filter by symbol upfront.
+#### Dimension Handler `set_history()` Return Values
+**Commit:** `3979fb4` | **Impact:** Eliminates redundant DB reads
+
+Added `return self.get_history()` to all 4 dimension handlers so `BaseHistoryHandler` can use the result instead of re-reading from DB after writes.
+
+#### `_add_pct_change()` Collect-then-Concat
+**Commit:** `3979fb4` | **Impact:** Minor cleanup
+
+Replaced concat-in-loop with collect-then-concat pattern.
+
+#### Vectorized `gen_historical_stats()`
+**Commit:** `cbea73a` | **Impact:** 3-5x faster
+
+Replaced per-symbol loop (300+ DataFrame operations for 100+ assets) with vectorized `groupby('Symbol')['ClosingPrice'].agg(first, last, max)` for both actuals and hypotheticals.
+
+#### Connection Pool Size Increase
+**Commit:** `cbea73a` | **Impact:** Reduces connection wait times
+
+Increased MySQL connection pool from 5 to 10 concurrent connections.
+
+#### yfinance Cache Expiration Tuning
+**Commit:** `cbea73a` | **Impact:** Better cache behavior
+
+Historical prices: 12h → 24h (stable data, rarely changes). Current prices: 1h → 15min (more relevant for intraday).
+
+---
+
+### Remaining: Medium Impact
+
+#### 1. Asset History Loaded for ALL Ever-Owned Assets
+**File:** `visualization/dash/DashboardHandler.py:41` | **Estimated speedup:** Reduces DB read size
+
+**Problem:** `AssetHistoryHandler()` on line 41 loads history for every asset ever owned (~200+), then line 53-54 filters down to current portfolio (~50 assets). The DB query should filter by symbol upfront.
 
 **Fix:** Pass current portfolio symbols to `AssetHistoryHandler`:
 ```python
@@ -109,96 +125,14 @@ portfolio_symbols = self.current_portfolio_summary_df['Symbol'].tolist()
 ah = AssetHistoryHandler(symbols=portfolio_symbols)
 ```
 
-#### 3. `add_asset_info()` Loaded Multiple Times
-**File:** `libraries/helpers.py:539` | **Estimated speedup:** Eliminates redundant DB calls
+Note: This requires reordering `DashboardHandler.__init__()` so `get_portfolio_current_value()` is called before `AssetHistoryHandler()`.
 
-**Problem:** `add_asset_info()` fetches the entire entities table via `mysql_to_df()` on every call. It's called 3+ times during `DashboardHandler` initialization:
-- In `expand_history_df()` (line 376)
-- In `gen_historical_stats()` (line 495)
-- In `get_portfolio_current_value()` (line 583)
-
-Even with caching, each call still parses and merges the DataFrame.
-
-**Fix:** Load entities once in `DashboardHandler.__init__()`, store as `self.entities_df`, and pass it to methods that need it.
-
----
-
-### Remaining: Medium Impact
-
-#### 4. `gen_historical_stats()` Per-Symbol Scalar Lookups
-**File:** `visualization/dash/DashboardHandler.py:419-488` | **Estimated speedup:** 3-5x
-
-**Problem:** For each symbol, performs 6 separate scalar lookups:
-```python
-for symbol in symbols:
-    symbol_actuals_df = actuals_df.loc[actuals_df['Symbol'] == symbol]
-    enter_price = symbol_actuals_df['ClosingPrice'].iloc[0]
-    latest_actuals_price = symbol_actuals_df['ClosingPrice'].iloc[-1]
-    max_actuals_price = symbol_actuals_df['ClosingPrice'].max()
-    # ... etc
-```
-
-With 100+ assets, this is 300+ DataFrame operations.
-
-**Fix:** Use vectorized groupby:
-```python
-price_stats = actuals_df.groupby('Symbol')['ClosingPrice'].agg(['first', 'last', 'max'])
-```
-
-#### 5. `build_master_log()` Concat-in-Loop
-**File:** `libraries/helpers.py:62-78` | **Estimated speedup:** ~15-20%
-
-**Problem:** Uses `pd.concat()` inside a loop (5 iterations for each event type) and `globals()` dictionary lookups for query/column names:
-```python
-for event in ASSET_EVENTS:
-    query = globals()[f"master_log_{event}s_query"]   # dynamic lookup
-    columns = globals()[f"master_log_{event}s_columns"]
-    event_log_df = mysql_to_df(query, columns, dbcfg, cached=True)
-    master_log_df = pd.concat([master_log_df, event_log_df])  # copies entire DF each time
-```
-
-**Fix:** Collect all DataFrames in a list, concat once at the end. Replace `globals()` lookups with a static mapping dict.
-
-#### 6. Connection Pool Size
-**File:** `libraries/db/mysqldb.py:14` | **Estimated speedup:** Reduces connection wait times
-
-**Problem:** Pool size of 5 is conservative. If 7+ handlers try to acquire connections concurrently during initialization, some will block waiting for a connection.
-
-**Fix:** Increase `pool_size` from 5 to 10.
-
-#### 7. yfinance Cache Expiration Mismatch
-**File:** `libraries/yfinance_helpers/yfinancelib.py:73, 166`
-
-**Problem:** Historical prices (stable, past data) cache for 12 hours — too short, these rarely change. Current prices cache for 1 hour — too long for intraday relevance.
-
-**Fix:**
-- Historical prices: 24 hours (`expire=60*60*24`)
-- Current prices: 15 minutes (`expire=60*15`)
-
-#### 8. Calendar Days Instead of Business Days
+#### 2. Calendar Days Instead of Business Days
 **File:** `libraries/yfinance_helpers/yfinancelib.py:143`
 
 **Problem:** `pd.date_range(start, end, freq='D')` creates entries for all calendar days, then forward-fills weekends/holidays. Creates ~30% unnecessary entries.
 
-**Fix:** Use `pd.bdate_range(start, end)` for business days only.
-
-#### 9. `_gen_summary_df()` Double GroupBy
-**File:** `visualization/dash/DashboardHandler.py:551-562`
-
-**Problem:** Groups by dimension twice (once for sums, once for means), then merges results:
-```python
-summary_df = portfolio_summary_df.groupby(dimension)[sum_cols].sum()
-mean_df = portfolio_summary_df.groupby(dimension)[mean_cols].mean()
-summary_df = summary_df.merge(mean_df, on=dimension)
-```
-
-**Fix:** Single groupby with `.agg()`:
-```python
-summary_df = portfolio_summary_df.groupby(dimension).agg({
-    'Cost Basis': 'sum', 'Current Value': 'sum',
-    'Total Dividend': 'sum', 'Dividend Yield': 'mean'
-})
-```
+**Fix:** Use `pd.bdate_range(start, end)` for business days only. Requires coordinated changes across `gen_hist_quantities()` (which also uses calendar days), price/quantity merge logic, and milestone date lookups to avoid breaking weekend date references.
 
 ---
 
