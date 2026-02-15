@@ -199,6 +199,7 @@ def update_assets_hist_graph(selected_rows, interval):
             line_dash=assets_history_df['Sector'],
         )
         assets_history_fig.update_layout(height=800)
+        assets_history_fig.update_yaxes(ticksuffix="%")
 
         return assets_history_fig
     except Exception as e:

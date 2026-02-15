@@ -114,6 +114,7 @@ def update_asset_types_hist_graph(selected_rows, interval):
         # line_dash=asset_types_history_df['AssetType'],
     )
     asset_types_history_fig.update_layout(height=800)
+    asset_types_history_fig.update_yaxes(ticksuffix="%")
 
     return asset_types_history_fig
 

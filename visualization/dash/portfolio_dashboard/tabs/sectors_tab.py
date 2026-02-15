@@ -114,6 +114,7 @@ def update_sectors_hist_graph(selected_rows, interval):
         # line_dash=sectors_history_df['Sector'],
     )
     sectors_history_fig.update_layout(height=800)
+    sectors_history_fig.update_yaxes(ticksuffix="%")
 
     return sectors_history_fig
 

@@ -114,6 +114,7 @@ def update_geography_hist_graph(selected_rows, interval):
         # line_dash=geography_history_df['Geography'],
     )
     geography_history_fig.update_layout(height=800)
+    geography_history_fig.update_yaxes(ticksuffix="%")
 
     return geography_history_fig
 
