@@ -119,6 +119,21 @@ Historical prices: 12h → 24h (stable data, rarely changes). Current prices: 1h
 - Added `dcc.Loading` wrapper around tabs for loading state feedback (`portfolio_dashboard.py`)
 - Added `rangeslider` to portfolio history chart (`portfolio_tab.py`)
 
+#### Replace DataTables with dash-ag-grid + Dimension Tab Factory
+**Commit:** `fabc329` | **Impact:** -657 lines, eliminates global state, fixes bugs
+
+Replaced all `dash_table.DataTable` components with `dag.AgGrid` across every tab. ag-grid's `selectedRows` returns actual row data (not indices), eliminating the need for `row_symbol_mapping` / `row_sector_mapping` globals and the fragile table-update callbacks that maintained them.
+
+Created `dimension_tab_factory.py` — a factory function `create_dimension_tab()` that generates all 4 dimension tabs (sectors, asset_types, account_types, geography) from 4 parameters. Each dimension tab file is now ~8 lines instead of ~177.
+
+- **Global state removed:** Zero `global` keywords remain in tab files
+- **Duplicate code eliminated:** 4 copy-pasted dimension tabs → 1 factory + 4 one-line calls
+- **Bug fixed:** `geography_tab.py` had copy-paste bug using `row_account_type_mapping` instead of `row_geography_mapping`
+- **Callbacks simplified:** Dimension tabs reduced from 2 callbacks (table update + graph update) to 1 (graph update only — ag-grid handles sorting/selection natively)
+- **Assets tab:** Dropdown filtering outputs `rowData` directly; graph callback reads `selectedRows` for symbols
+- **Portfolio tab:** 3 DataTables (milestones, winners, losers) replaced with AgGrids using `domLayout: autoHeight`
+- **Hypotheticals tab:** Static stats DataTable replaced with AgGrid
+
 ---
 
 ### Remaining: Medium Impact
@@ -139,12 +154,12 @@ Historical prices: 12h → 24h (stable data, rarely changes). Current prices: 1h
 
 ### Architectural Issues
 
-#### 1. Global Mutable State in Callbacks
-**Files:** `tabs/assets_tab.py:55`, `tabs/sectors_tab.py`, etc.
+#### ~~1. Global Mutable State in Callbacks~~
+~~**Files:** `tabs/assets_tab.py:55`, `tabs/sectors_tab.py`, etc.~~
 
-Tabs use `global assets_table_df, row_symbol_mapping` — mutating shared state in callbacks. This is fragile and will break with concurrent users.
+~~Tabs use `global assets_table_df, row_symbol_mapping` — mutating shared state in callbacks. This is fragile and will break with concurrent users.~~
 
-**Fix:** Replace with `dcc.Store` for client-side state management.
+**Status:** Done (`fabc329`). Eliminated entirely by switching to dash-ag-grid — `selectedRows` returns actual row data, so row mappings and global state are no longer needed.
 
 #### 2. All Tabs Load at Startup
 **Files:** `tabs/__init__.py`, `globals.py`
@@ -153,12 +168,12 @@ Every tab executes module-level code at import time, even tabs the user never vi
 
 **Fix:** Use Dash Pages (lazy loading) or deferred tab initialization.
 
-#### 3. Four Dimension Tabs are 90% Duplicate Code
-**Files:** `tabs/sectors_tab.py`, `tabs/asset_types_tab.py`, `tabs/account_types_tab.py`, `tabs/geography_tab.py`
+#### ~~3. Four Dimension Tabs are 90% Duplicate Code~~
+~~**Files:** `tabs/sectors_tab.py`, `tabs/asset_types_tab.py`, `tabs/account_types_tab.py`, `tabs/geography_tab.py`~~
 
-Nearly identical code maintained as separate files. A bug fix must be replicated 4 times.
+~~Nearly identical code maintained as separate files. A bug fix must be replicated 4 times.~~
 
-**Fix:** Refactor into a single parameterized `DimensionTab` component/factory function.
+**Status:** Done (`fabc329`). Refactored into `dimension_tab_factory.py`. Each tab file is now a single factory call (~8 lines). Also fixed a copy-paste bug in `geography_tab.py`.
 
 ### UX Gaps
 
@@ -199,7 +214,7 @@ Uses `port_hist_df['Value'][0]` instead of `port_hist_df['Value'].iloc[0]` — f
 - **No secondary Y-axis** (absolute value + % change on same chart)
 - **No date range slider** on charts (`rangeslider={'visible': True}`)
 - **No conditional coloring** (green/red for positive/negative returns in tables)
-- **No keyboard navigation** — DataTables require mouse for row selection (accessibility issue)
+- ~~**No keyboard navigation** — DataTables require mouse for row selection (accessibility issue)~~ — Improved by ag-grid migration (`fabc329`)
 
 ### Quick Wins
 
@@ -248,12 +263,12 @@ Uses `port_hist_df['Value'][0]` instead of `port_hist_df['Value'].iloc[0]` — f
 
 These can be made incrementally without a framework migration:
 
-1. **Replace `dash_table.DataTable` with `dash-ag-grid`** — Vastly better row selection, cell formatting (green/red returns), and filtering. Eliminates the `row_symbol_mapping` workaround entirely.
+1. ~~**Replace `dash_table.DataTable` with `dash-ag-grid`**~~ — Done (`fabc329`). All DataTables replaced with AgGrid across all 7 tabs. Row selection, sorting, and filtering now handled natively by ag-grid.
 
 2. **Add `dash-mantine-components`** — More polished dropdowns, cards, and tabs than `dash-bootstrap-components`.
 
 3. **Use Dash Pages** — Multi-page app pattern with lazy loading. Tabs only load when visited, improving startup time.
 
-4. **Replace `global` state with `dcc.Store`** — Client-side state management, safe for concurrent users.
+4. ~~**Replace `global` state with `dcc.Store`**~~ — Resolved by ag-grid migration (`fabc329`). Global state was only needed to work around DataTable's unreliable `selected_row_ids`. ag-grid's `selectedRows` returns actual row data, so no client-side state storage is needed.
 
 5. **Add `clientside_callback`** — Move simple filtering/sorting operations to JavaScript for instant response.
