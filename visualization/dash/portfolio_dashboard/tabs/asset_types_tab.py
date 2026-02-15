@@ -5,4 +5,5 @@ asset_types_tab = create_dimension_tab(
     column_name="AssetType",
     summary_df_attr="asset_types_summary_df",
     history_df_attr="asset_types_history_df",
+    tab_id="asset-types-dash-tab",
 )

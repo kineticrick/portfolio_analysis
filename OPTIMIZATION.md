@@ -161,12 +161,12 @@ Created `dimension_tab_factory.py` — a factory function `create_dimension_tab(
 
 **Status:** Done (`fabc329`). Eliminated entirely by switching to dash-ag-grid — `selectedRows` returns actual row data, so row mappings and global state are no longer needed.
 
-#### 2. All Tabs Load at Startup
-**Files:** `tabs/__init__.py`, `globals.py`
+#### ~~2. All Tabs Load at Startup~~
+~~**Files:** `tabs/__init__.py`, `globals.py`~~
 
-Every tab executes module-level code at import time, even tabs the user never visits. `DashboardHandler.__init__()` precomputes everything. No lazy loading — the user stares at a blank screen during initialization.
+~~Every tab executes module-level code at import time, even tabs the user never visits. `DashboardHandler.__init__()` precomputes everything. No lazy loading — the user stares at a blank screen during initialization.~~
 
-**Fix:** Use Dash Pages (lazy loading) or deferred tab initialization.
+**Status:** Done. `DashboardHandler` now uses lazy `@property` methods for 5 handlers (Hypotheticals, Sector, AssetType, AccountType, Geography). Dimension tabs and hypotheticals tab defer all data access into callbacks gated by the active tab ID. Only Asset + Portfolio handlers load at startup.
 
 #### ~~3. Four Dimension Tabs are 90% Duplicate Code~~
 ~~**Files:** `tabs/sectors_tab.py`, `tabs/asset_types_tab.py`, `tabs/account_types_tab.py`, `tabs/geography_tab.py`~~
@@ -265,10 +265,10 @@ These can be made incrementally without a framework migration:
 
 1. ~~**Replace `dash_table.DataTable` with `dash-ag-grid`**~~ — Done (`fabc329`). All DataTables replaced with AgGrid across all 7 tabs. Row selection, sorting, and filtering now handled natively by ag-grid.
 
-2. **Add `dash-mantine-components`** — More polished dropdowns, cards, and tabs than `dash-bootstrap-components`.
+2. ~~**Add `dash-mantine-components`**~~ — Done. Replaced all `dash-bootstrap-components` (`dbc`) with `dash-mantine-components` (`dmc`) across all tab files and the main dashboard. `dbc.Container` → `dmc.Container`, `dbc.Row` → `dmc.Grid`, `dbc.Col` → `dmc.GridCol`, `dbc.Card` → `dmc.Paper`, `dbc.Tabs` → `dmc.Tabs`/`TabsList`/`TabsTab`/`TabsPanel`, wrapped in `dmc.MantineProvider`.
 
-3. **Use Dash Pages** — Multi-page app pattern with lazy loading. Tabs only load when visited, improving startup time.
+3. ~~**Use Dash Pages / Lazy Loading**~~ — Done (without Dash Pages). Implemented lazy `@property` handlers in `DashboardHandler` plus tab-gated callbacks. Dimension and hypothetical tabs only load data on first visit, achieving the same startup improvement as Dash Pages without the framework restructuring.
 
 4. ~~**Replace `global` state with `dcc.Store`**~~ — Resolved by ag-grid migration (`fabc329`). Global state was only needed to work around DataTable's unreliable `selected_row_ids`. ag-grid's `selectedRows` returns actual row data, so no client-side state storage is needed.
 
-5. **Add `clientside_callback`** — Move simple filtering/sorting operations to JavaScript for instant response.
+5. ~~**Add `clientside_callback`**~~ — Done. Replaced the `set_asset_dropdown_values` server callback in `hypotheticals_tab.py` with a `clientside_callback` — a 3-line JavaScript function that auto-selects assets when sectors are chosen, with no server round-trip.

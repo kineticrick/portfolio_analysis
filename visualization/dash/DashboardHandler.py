@@ -85,51 +85,108 @@ class DashboardHandler:
         # Get and set portfolio milestones
         self.portfolio_milestones = self.get_portfolio_milestones()
   
-        ####### HYPOTHETICALS #######
+        ####### LAZY-LOADED HANDLERS #######
+        # Hypotheticals and dimension handlers are deferred until first access
+        self._assets_hypothetical_history_df = None
+        self._exits_actuals_history_df = None
+        self._exits_hypotheticals_history_df = None
+        self._sectors_history_df = None
+        self._sectors_summary_df = None
+        self._asset_types_history_df = None
+        self._asset_types_summary_df = None
+        self._account_types_history_df = None
+        self._account_types_summary_df = None
+        self._geography_history_df = None
+        self._geography_summary_df = None
 
-        # Get and set assets hypothetical history for all exited assets
-        ahh = AssetHypotheticalHistoryHandler(
-            assets_history_df=self.assets_history_df)
-        
-        self.assets_hypothetical_history_df = ahh.history_df
+    def _load_hypotheticals(self):
+        """Load hypothetical history data on first access."""
+        if self._assets_hypothetical_history_df is None:
+            print("Loading hypothetical history data...")
+            ahh = AssetHypotheticalHistoryHandler(
+                assets_history_df=self.assets_history_df)
+            self._assets_hypothetical_history_df = ahh.history_df
+            self._exits_actuals_history_df = self._assets_hypothetical_history_df.loc[
+                (self._assets_hypothetical_history_df['Owned'] == 'Actual')]
+            self._exits_hypotheticals_history_df = self._assets_hypothetical_history_df.loc[
+                (self._assets_hypothetical_history_df['Owned'] == 'Hypothetical')]
+            print("✓ Hypothetical history loaded")
 
-    #     # Split into actuals and hypotheticals, to make it possibly easier when needed
-        self.exits_actuals_history_df = self.assets_hypothetical_history_df.loc[
-            (self.assets_hypothetical_history_df['Owned'] == 'Actual')]
-        self.exits_hypotheticals_history_df = self.assets_hypothetical_history_df.loc[
-            (self.assets_hypothetical_history_df['Owned'] == 'Hypothetical')]
+    @property
+    def assets_hypothetical_history_df(self):
+        self._load_hypotheticals()
+        return self._assets_hypothetical_history_df
 
-        ####### SECTORS #######
-        
-        # Get and set sectors values history
-        sh = SectorHistoryHandler()
-        self.sectors_history_df = sh.history_df
-        self.sectors_summary_df = self._gen_summary_df(
-            dimension='Sector', history_df=self.sectors_history_df)
+    @property
+    def exits_actuals_history_df(self):
+        self._load_hypotheticals()
+        return self._exits_actuals_history_df
 
-        ####### ASSET TYPES #######
-        
-        # Get and set sectors values history
-        ath = AssetTypeHistoryHandler()
-        self.asset_types_history_df = ath.history_df
-        self.asset_types_summary_df = self._gen_summary_df(
-            dimension='AssetType', history_df=self.asset_types_history_df)
-        
-        ####### ACCOUNT TYPES #######
-        
-        # Get and set account types values history
-        acth = AccountTypeHistoryHandler()
-        self.account_types_history_df = acth.history_df
-        self.account_types_summary_df = self._gen_summary_df(
-            dimension='AccountType', history_df=self.account_types_history_df)
-        
-        ####### GEOGRAPHIES #######
-        
-        # Get and set geography values history
-        gth = GeographyHistoryHandler()
-        self.geography_history_df = gth.history_df
-        self.geography_summary_df = self._gen_summary_df(
-            dimension='Geography', history_df=self.geography_history_df)
+    @property
+    def exits_hypotheticals_history_df(self):
+        self._load_hypotheticals()
+        return self._exits_hypotheticals_history_df
+
+    def _load_dimension(self, dimension, handler_class):
+        """Load a dimension handler on first access."""
+        cache_attr = f'_{dimension.lower()}_history_df'
+        summary_attr = f'_{dimension.lower()}_summary_df'
+        # Map dimension names to the attribute-style names used in the codebase
+        dim_map = {
+            'Sector': 'sectors', 'AssetType': 'asset_types',
+            'AccountType': 'account_types', 'Geography': 'geography'
+        }
+        attr_prefix = dim_map[dimension]
+        cache_attr = f'_{attr_prefix}_history_df'
+        summary_attr = f'_{attr_prefix}_summary_df'
+
+        if getattr(self, cache_attr) is None:
+            print(f"Loading {dimension} history data...")
+            handler = handler_class()
+            setattr(self, cache_attr, handler.history_df)
+            setattr(self, summary_attr, self._gen_summary_df(
+                dimension=dimension, history_df=handler.history_df))
+            print(f"✓ {dimension} history loaded")
+
+    @property
+    def sectors_history_df(self):
+        self._load_dimension('Sector', SectorHistoryHandler)
+        return self._sectors_history_df
+
+    @property
+    def sectors_summary_df(self):
+        self._load_dimension('Sector', SectorHistoryHandler)
+        return self._sectors_summary_df
+
+    @property
+    def asset_types_history_df(self):
+        self._load_dimension('AssetType', AssetTypeHistoryHandler)
+        return self._asset_types_history_df
+
+    @property
+    def asset_types_summary_df(self):
+        self._load_dimension('AssetType', AssetTypeHistoryHandler)
+        return self._asset_types_summary_df
+
+    @property
+    def account_types_history_df(self):
+        self._load_dimension('AccountType', AccountTypeHistoryHandler)
+        return self._account_types_history_df
+
+    @property
+    def account_types_summary_df(self):
+        self._load_dimension('AccountType', AccountTypeHistoryHandler)
+        return self._account_types_summary_df
+
+    @property
+    def geography_history_df(self):
+        self._load_dimension('Geography', GeographyHistoryHandler)
+        return self._geography_history_df
+
+    @property
+    def geography_summary_df(self):
+        self._load_dimension('Geography', GeographyHistoryHandler)
+        return self._geography_summary_df
         
     def _gen_performance_milestones(self, history_df: pd.DataFrame, current_value: float,
                                     current_price: float=None,  

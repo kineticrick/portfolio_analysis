@@ -5,4 +5,5 @@ geography_tab = create_dimension_tab(
     column_name="Geography",
     summary_df_attr="geography_summary_df",
     history_df_attr="geography_history_df",
+    tab_id="geography-dash-tab",
 )

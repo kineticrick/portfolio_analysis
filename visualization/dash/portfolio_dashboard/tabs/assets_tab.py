@@ -7,7 +7,7 @@ import pandas as pd
 from visualization.dash.portfolio_dashboard.globals import *
 from pandas.tseries.offsets import DateOffset
 
-import dash_bootstrap_components as dbc
+import dash_mantine_components as dmc
 
 # Get assets table and prepare to be displayed
 assets_table_df = DASH_HANDLER.assets_summary_df
@@ -118,11 +118,11 @@ def update_assets_hist_graph(selected_rows, interval):
         print(f"Error in update_assets_hist_graph: {e}")
         return go.Figure().update_layout(title=f"Error loading chart: {str(e)}")
 
-assets_tab = dbc.Container(
+assets_tab = dmc.Container(
     [
-        dbc.Row([
-            dbc.Col(
-                dbc.Card(
+        dmc.Grid([
+            dmc.GridCol(
+                dmc.Paper(
                     dag.AgGrid(
                         id='assets-table',
                         columnDefs=column_defs,
@@ -136,77 +136,77 @@ assets_tab = dbc.Container(
                         },
                         style={"height": "600px"},
                     ),
+                    shadow="sm", p="md",
                 ),
-                width={'size': 12}
-            ),],
-            justify='start'
-        ),
-        dbc.Row([
-            dbc.Col(
+                span=12,
+            ),
+        ]),
+        dmc.Grid([
+            dmc.GridCol(
                 dcc.Dropdown(
                     id='assets-interval-dropdown',
                     options=INTERVALS,
                     value=DEFAULT_INTERVAL,
                     placeholder='Select interval',
                 ),
-                width={'offset': 1, 'size': 3}
+                span=3, offset=1,
             ),
-        ],),
-        dbc.Row([
-            dbc.Col(
+        ]),
+        dmc.Grid([
+            dmc.GridCol(
                 dcc.Dropdown(
                     options=sectors,
                     id='sector-select-dropdown',
                     placeholder='Select sector(s)',
                     multi=True,
                 ),
-                width={'offset': 1, 'size': 3}
+                span=3, offset=1,
             ),
-        ],),
-        dbc.Row([
-            dbc.Col(
+        ]),
+        dmc.Grid([
+            dmc.GridCol(
                 dcc.Dropdown(
                     options=asset_types,
                     id='asset-type-select-dropdown',
                     placeholder='Select asset type(s)',
                     multi=True,
                 ),
-                width={'offset': 1, 'size': 3}
+                span=3, offset=1,
             ),
-        ],),
-        dbc.Row([
-            dbc.Col(
+        ]),
+        dmc.Grid([
+            dmc.GridCol(
                 dcc.Dropdown(
                     options=account_types,
                     id='account-type-select-dropdown',
                     placeholder='Select account type(s)',
                     multi=True,
                 ),
-                width={'offset': 1, 'size': 3}
+                span=3, offset=1,
             ),
-        ],),
-        dbc.Row([
-            dbc.Col(
+        ]),
+        dmc.Grid([
+            dmc.GridCol(
                 dcc.Dropdown(
                     options=geography,
                     id='geography-select-dropdown',
                     placeholder='Select geography(s)',
                     multi=True,
                 ),
-                width={'offset': 1, 'size': 3}
+                span=3, offset=1,
             ),
-        ],),
-        dbc.Row(
-            dbc.Col(
-                dbc.Card(
+        ]),
+        dmc.Grid([
+            dmc.GridCol(
+                dmc.Paper(
                     dcc.Graph(
                         id='assets-history-graph',
                     ),
+                    shadow="sm", p="md",
                 ),
-                width={'size': 12}
+                span=12,
             ),
-            justify='start'
-        ),
+        ]),
     ],
-    fluid=True
+    fluid=True,
 )
