@@ -11,11 +11,11 @@ def _get_connection_pool(cfg):
     if _connection_pool is None:
         _connection_pool = pooling.MySQLConnectionPool(
             pool_name="portfolio_pool",
-            pool_size=5,  # Max 5 concurrent connections
+            pool_size=10,  # Max 10 concurrent connections
             pool_reset_session=True,
             **cfg
         )
-        print("✓ MySQL connection pool created (size=5)")
+        print("✓ MySQL connection pool created (size=10)")
     return _connection_pool
 
 class MysqlDB:

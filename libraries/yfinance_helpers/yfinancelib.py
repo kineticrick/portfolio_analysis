@@ -70,7 +70,7 @@ def get_tickers_from_yfinance(tickers: list) -> dict:
     
     return ticker_info
 
-@cache.memoize(expire=60*60*12) 
+@cache.memoize(expire=60*60*24)
 def _gen_historical_prices(tickers, start, end): 
     """ 
     Helper function to retrieve historical prices for a list of ticker objects
@@ -163,7 +163,7 @@ def get_historical_prices(tickers: list, start: str=None,
     
     return prices_df
 
-@cache.memoize(expire=60*60*1) 
+@cache.memoize(expire=60*15)
 def _gen_current_prices(tickers: list) -> list:
     """ 
     Given list of tickers, return current/realtime price data
