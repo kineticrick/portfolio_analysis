@@ -1,10 +1,15 @@
-from dash import callback, dcc, html, dash_table, Input, Output
+from dash import callback, dcc, html, Input, Output
+import dash_ag_grid as dag
 import plotly.graph_objs as go
 import plotly.express as px
 import pandas as pd
 from visualization.dash.portfolio_dashboard.globals import *
 from pandas.tseries.offsets import DateOffset
 import dash_bootstrap_components as dbc
+
+# Build column defs for the static milestones table
+milestones_column_defs = [{"field": col, "sortable": True, "filter": True}
+                          for col in PORTFOLIO_MILESTONES.columns]
 
 @callback(
     Output('portfolio-history-graph', 'figure'),
@@ -13,22 +18,19 @@ def update_port_hist_graph(interval):
     try:
         interval_days = {k:v for (k,v) in DASH_HANDLER.performance_milestones}
 
-        # Get portfolio history BEFORE using it
         port_hist_df = DASH_HANDLER.portfolio_history_df
 
         if interval == "Lifetime":
-            date = port_hist_df.index[0]  # Use earliest date for lifetime
+            date = port_hist_df.index[0]
         else:
-            days = interval_days.get(interval, 365)  # Default to 1 year if interval not found
+            days = interval_days.get(interval, 365)
             offset = DateOffset(days=days)
             date = pd.to_datetime('today') - offset
             date = date.strftime('%Y-%m-%d')
 
-        # Filter data
         port_hist_df = port_hist_df[port_hist_df.index >= date]
 
         if port_hist_df.empty:
-            # Return empty figure if no data
             return go.Figure().update_layout(title="No data available for selected interval")
 
         port_hist_df['Value'] = port_hist_df['Value'].astype(float)
@@ -53,10 +55,10 @@ def update_port_hist_graph(interval):
         return go.Figure().update_layout(title=f"Error loading portfolio history: {str(e)}")
 
 @callback(
-    Output('winners-table', 'columns'),
-    Output('winners-table', 'data'),
-    Output('losers-table', 'columns'),
-    Output('losers-table', 'data'),
+    Output('winners-table', 'rowData'),
+    Output('winners-table', 'columnDefs'),
+    Output('losers-table', 'rowData'),
+    Output('losers-table', 'columnDefs'),
     Input('interval-dropdown', 'value'))
 def update_asset_tables(interval):
     try:
@@ -64,22 +66,23 @@ def update_asset_tables(interval):
             interval, 'price', ascending=False, count=NUM_WINNERS_LOSERS)
         winners_df = winners_df[['Symbol', 'Interval', 'Current Price',
                                  'Price', 'Price % Return']]
-        winners_columns=[{"name": i, "id": i} for i in winners_df.columns]
-        winners_data = winners_df.to_dict('records')
+        winners_col_defs = [{"field": col, "sortable": True, "filter": True}
+                            for col in winners_df.columns]
 
         losers_df = DASH_HANDLER.get_ranked_assets(
             interval, 'price', ascending=True, count=NUM_WINNERS_LOSERS)
         losers_df = losers_df[['Symbol', 'Interval', 'Current Price',
                                'Price', 'Price % Return']]
-        losers_columns = [{"name": i, "id": i} for i in losers_df.columns]
-        losers_data = losers_df.to_dict('records')
+        losers_col_defs = [{"field": col, "sortable": True, "filter": True}
+                           for col in losers_df.columns]
 
-        return winners_columns, winners_data, losers_columns, losers_data
+        return (winners_df.to_dict('records'), winners_col_defs,
+                losers_df.to_dict('records'), losers_col_defs)
     except Exception as e:
         print(f"Error in update_asset_tables: {e}")
-        empty_cols = [{"name": "Error", "id": "error"}]
-        empty_data = [{"error": f"Error loading data: {str(e)}"}]
-        return empty_cols, empty_data, empty_cols, empty_data
+        err_col = [{"field": "Error"}]
+        err_data = [{"Error": f"Error loading data: {str(e)}"}]
+        return err_data, err_col, err_data, err_col
 
 @callback(
     Output('portfolio-value-scalar', 'figure'),
@@ -127,12 +130,12 @@ portfolio_tab = dbc.Container(
         ),
         html.Hr(),
         dbc.Row([
-            dbc.Col(        
+            dbc.Col(
                 html.Div([
-                    "Select period:", 
+                    "Select period:",
                     dcc.Dropdown(
                         id='interval-dropdown',
-                        options=INTERVALS, 
+                        options=INTERVALS,
                         value=PORTFOLIO_DEFAULT_INTERVAL,
                     ),
                 ],),
@@ -145,7 +148,6 @@ portfolio_tab = dbc.Container(
                 dbc.Card(
                     dcc.Graph(
                         id='portfolio-history-graph',
-                        # figure=port_hist_fig
                     ),
                 ),
                 width={'size': 9}
@@ -155,46 +157,48 @@ portfolio_tab = dbc.Container(
                     dbc.Stack([
                         dcc.Graph(
                             id='portfolio-value-scalar',
-                            # figure=port_value_fig, 
                         ),
-                        dash_table.DataTable(
+                        dag.AgGrid(
                             id='portfolio-milestones-table',
-                            columns=[{"name": i, "id": i} 
-                                for i in PORTFOLIO_MILESTONES.columns],
-                            data=PORTFOLIO_MILESTONES.to_dict('records'),
-                        )], 
+                            columnDefs=milestones_column_defs,
+                            rowData=PORTFOLIO_MILESTONES.to_dict('records'),
+                            defaultColDef={"resizable": True},
+                            dashGridOptions={"domLayout": "autoHeight"},
+                        )],
                         gap=3
-                    ), 
+                    ),
                 ),
                 width={'size': 3}
             )],
-            justify='start'   
+            justify='start'
         ),
         dbc.Row([
             dbc.Col(
             dbc.Card(
-                    dash_table.DataTable(
+                    dag.AgGrid(
                         id='winners-table',
-                        # columns=[{"name": i, "id": i}
-                        #     for i in winners_df.columns],
-                        # data=winners_df.to_dict('records'),
+                        columnDefs=[],
+                        rowData=[],
+                        defaultColDef={"resizable": True},
+                        dashGridOptions={"domLayout": "autoHeight"},
                     ),
                 ),
-                width={'size': 3, 'offset': 1},  
-            ), 
+                width={'size': 3, 'offset': 1},
+            ),
             dbc.Col(
             dbc.Card(
-                    dash_table.DataTable(
+                    dag.AgGrid(
                         id='losers-table',
-                        # columns=[{"name": i, "id": i}
-                        #     for i in losers_df.columns],
-                        # data=losers_df.to_dict('records'),
+                        columnDefs=[],
+                        rowData=[],
+                        defaultColDef={"resizable": True},
+                        dashGridOptions={"domLayout": "autoHeight"},
                     ),
                 ),
-                width={'size': 3, 'offset': 1},  
+                width={'size': 3, 'offset': 1},
             ),],
             justify='start'
         ),
-    ], 
+    ],
     fluid=True
 )
