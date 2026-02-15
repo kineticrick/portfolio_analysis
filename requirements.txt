@@ -12,6 +12,7 @@ colorama>=0.4.3
 cryptography>=40.0.2
 dash>=2.10.2
 dash-bootstrap-components>=1.4.1
+dash-ag-grid>=31.0.0
 dash-core-components>=2.0.0
 dash-html-components>=2.0.0
 dash-table>=5.0.0
