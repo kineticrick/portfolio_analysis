@@ -1,6 +1,11 @@
+import os
 from visualization.dash.DashboardHandler import DashboardHandler
 
-DASH_HANDLER = DashboardHandler()
+if os.environ.get('PORTFOLIO_DEMO_MODE') == '1':
+    from visualization.dash.DemoDashboardHandler import DemoDashboardHandler
+    DASH_HANDLER = DemoDashboardHandler()
+else:
+    DASH_HANDLER = DashboardHandler()
 
 MILESTONES = DASH_HANDLER.portfolio_milestones
 INTERVALS = MILESTONES['Interval'].values.tolist()

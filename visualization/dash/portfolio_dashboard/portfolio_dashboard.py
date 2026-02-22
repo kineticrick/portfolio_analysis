@@ -2,6 +2,16 @@ import os
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '../../..'))
 
+# Parse --demo before any tab imports so PORTFOLIO_DEMO_MODE is set in time
+import argparse
+_parser = argparse.ArgumentParser()
+_parser.add_argument('--demo', action='store_true',
+                     help='Run dashboard with synthetic demo data (no DB or yfinance calls)')
+_args, _ = _parser.parse_known_args()
+if _args.demo:
+    os.environ['PORTFOLIO_DEMO_MODE'] = '1'
+    print("DEMO MODE — using synthetic portfolio data")
+
 import time
 enter = time.perf_counter()
 
@@ -29,32 +39,42 @@ from visualization.dash.portfolio_dashboard.tabs import (
 
 
 print("Loading Portfolio Tabs...")
-app.layout = dmc.MantineProvider(
-    dcc.Loading(
-        dmc.Tabs(
-            value='portfolio-dash-tab',
-            id='tabs',
-            children=[
-                dmc.TabsList([
-                    dmc.TabsTab('Portfolio', value='portfolio-dash-tab'),
-                    dmc.TabsTab('Sectors', value='sectors-dash-tab'),
-                    dmc.TabsTab('Asset Types', value='asset-types-dash-tab'),
-                    dmc.TabsTab('Account Types', value='account-types-dash-tab'),
-                    dmc.TabsTab('Geography', value='geography-dash-tab'),
-                    dmc.TabsTab('Assets', value='assets-dash-tab'),
-                    dmc.TabsTab('Hypotheticals', value='hypotheticals-dash-tab'),
-                ]),
-                dmc.TabsPanel(portfolio_tab, value='portfolio-dash-tab'),
-                dmc.TabsPanel(sectors_tab, value='sectors-dash-tab'),
-                dmc.TabsPanel(asset_types_tab, value='asset-types-dash-tab'),
-                dmc.TabsPanel(account_types_tab, value='account-types-dash-tab'),
-                dmc.TabsPanel(geography_tab, value='geography-dash-tab'),
-                dmc.TabsPanel(assets_tab, value='assets-dash-tab'),
-                dmc.TabsPanel(hypotheticals_tab, value='hypotheticals-dash-tab'),
-            ],
-        )
-    )
+
+_tabs = dmc.Tabs(
+    value='portfolio-dash-tab',
+    id='tabs',
+    children=[
+        dmc.TabsList([
+            dmc.TabsTab('Portfolio', value='portfolio-dash-tab'),
+            dmc.TabsTab('Sectors', value='sectors-dash-tab'),
+            dmc.TabsTab('Asset Types', value='asset-types-dash-tab'),
+            dmc.TabsTab('Account Types', value='account-types-dash-tab'),
+            dmc.TabsTab('Geography', value='geography-dash-tab'),
+            dmc.TabsTab('Assets', value='assets-dash-tab'),
+            dmc.TabsTab('Hypotheticals', value='hypotheticals-dash-tab'),
+        ]),
+        dmc.TabsPanel(portfolio_tab, value='portfolio-dash-tab'),
+        dmc.TabsPanel(sectors_tab, value='sectors-dash-tab'),
+        dmc.TabsPanel(asset_types_tab, value='asset-types-dash-tab'),
+        dmc.TabsPanel(account_types_tab, value='account-types-dash-tab'),
+        dmc.TabsPanel(geography_tab, value='geography-dash-tab'),
+        dmc.TabsPanel(assets_tab, value='assets-dash-tab'),
+        dmc.TabsPanel(hypotheticals_tab, value='hypotheticals-dash-tab'),
+    ],
 )
+
+if os.environ.get('PORTFOLIO_DEMO_MODE') == '1':
+    _content = dmc.Stack([
+        dmc.Alert(
+            "DEMO MODE — All data is synthetic. No real financial information is displayed.",
+            color="orange", variant="filled", mb="xs",
+        ),
+        _tabs,
+    ], gap=0)
+else:
+    _content = _tabs
+
+app.layout = dmc.MantineProvider(dcc.Loading(_content))
 
 print(f'Portfolio Dashboard loaded in {time.perf_counter() - enter} seconds')
 
