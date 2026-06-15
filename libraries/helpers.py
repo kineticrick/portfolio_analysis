@@ -497,9 +497,9 @@ def gen_aggregated_historical_value(dimension: str,
     Dimension can be 'sector' or 'asset_type' or 'account_type'
 
     Returns: aggregated_df ->
-    Date, [Dimension], AvgPercentReturn
-    2016-02-17  Aerospace + Defense    3545.51
-    2016-02-18  Aerospace + Defense    3581.38
+    Date, [Dimension], total_value, total_cost_basis
+    2016-02-17  Aerospace + Defense    12500.00   9000.00
+    2016-02-18  Aerospace + Defense    12750.00   9000.00
     """
     assert(type(symbols) == list)
     assert(dimension in ['Sector', 'AssetType', 'AccountType', 'Geography'])
@@ -518,10 +518,13 @@ def gen_aggregated_historical_value(dimension: str,
 
     expanded_df = _aggregation_cache[cache_key]
 
-    # Aggregate by dimension and date — this is the cheap part
-    aggregated_df = expanded_df.groupby(['Date', dimension])['PercentReturn'].mean()
-    aggregated_df = aggregated_df.reset_index()
-    aggregated_df = aggregated_df.rename(columns={'PercentReturn':'AvgPercentReturn'})
+    # Aggregate by dimension and date by SUMMING dollars (value-weighted),
+    # instead of averaging per-asset percent returns. Storing the dollar
+    # primitives lets the charts derive lifetime returns AND rebase any window.
+    aggregated_df = expanded_df.groupby(['Date', dimension]).agg(
+        total_value=('Value', 'sum'),
+        total_cost_basis=('CostBasis', 'sum'),
+    ).reset_index()
     aggregated_df = aggregated_df.sort_values(by=[dimension, 'Date'],
                                               ascending=True)
 

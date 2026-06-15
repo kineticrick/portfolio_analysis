@@ -94,11 +94,36 @@ class TestHelpers(unittest.TestCase):
         # Test sector aggregation
         sector_result = gen_aggregated_historical_value('Sector', symbols=symbols)
         self.assertTrue('Sector' in sector_result.columns)
-        self.assertTrue('AvgPercentReturn' in sector_result.columns)
-        
+        self.assertTrue('total_value' in sector_result.columns)
+        self.assertTrue('total_cost_basis' in sector_result.columns)
+
         # Test asset type aggregation
         asset_type_result = gen_aggregated_historical_value('AssetType', symbols=symbols)
         self.assertTrue('AssetType' in asset_type_result.columns)
+
+    def test_gen_aggregated_historical_value_is_value_weighted(self):
+        # Two assets, same sector, very different sizes.
+        # Big winner should dominate -> value-weighted, not a 50/50 average.
+        import libraries.helpers as H
+        H._aggregation_cache.clear()
+        expanded = pd.DataFrame({
+            'Date':       ['2024-01-01', '2024-01-01'],
+            'Symbol':     ['BIG', 'SMALL'],
+            'Value':      [29000.0, 1000.0],
+            'CostBasis':  [16000.0, 2000.0],
+            'PercentReturn': [81.25, -50.0],
+            'Sector':     ['Biotech', 'Biotech'],
+        })
+        # Inject directly into the cache so we exercise the aggregation only.
+        key = ((), 'daily', 'None')
+        H._aggregation_cache[key] = expanded
+        out = H.gen_aggregated_historical_value(dimension='Sector')
+        row = out.iloc[0]
+        self.assertTrue(set(['Date', 'Sector', 'total_value', 'total_cost_basis'])
+                        .issubset(out.columns))
+        self.assertAlmostEqual(row['total_value'], 30000.0)
+        self.assertAlmostEqual(row['total_cost_basis'], 18000.0)
+        H._aggregation_cache.clear()
         
         # Test with specific symbols
         # symbols = ['AAPL', 'MSFT']
