@@ -41,14 +41,17 @@ class AssetTypeHistoryHandler(BaseHistoryHandler):
         # OPTIMIZATION: Batch insert using executemany() instead of individual INSERTs
         with MysqlDB(dbcfg) as db:
             if overwrite:
-                sql = """REPLACE INTO asset_types_history (date, asset_type, avg_percent_return)
-                         VALUES (%s, %s, %s)"""
+                sql = """REPLACE INTO asset_types_history
+                         (date, asset_type, total_value, total_cost_basis)
+                         VALUES (%s, %s, %s, %s)"""
             else:
-                sql = """INSERT IGNORE INTO asset_types_history (date, asset_type, avg_percent_return)
-                         VALUES (%s, %s, %s)"""
+                sql = """INSERT IGNORE INTO asset_types_history
+                         (date, asset_type, total_value, total_cost_basis)
+                         VALUES (%s, %s, %s, %s)"""
 
             values = [
-                (row['Date'], row['AssetType'], float(row['AvgPercentReturn']))
+                (row['Date'], row['AssetType'],
+                 float(row['total_value']), float(row['total_cost_basis']))
                 for _, row in asset_types_historical_data_df.iterrows()
             ]
 
