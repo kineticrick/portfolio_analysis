@@ -605,13 +605,17 @@ class DashboardHandler:
             (summary_df['Current Value'] - summary_df['Cost Basis']) \
                 / summary_df['Cost Basis'] * 100
         
-        # For avg daily return, get latest daily return for each asset 
-        # from history_df        
+        # Merge the latest history row, deriving the value-weighted return from
+        # the stored dollars (history now stores TotalValue/TotalCostBasis).
         latest_history_date = history_df['Date'].max()
         latest_history_df = history_df.loc[
-            history_df['Date'] == latest_history_date] 
+            history_df['Date'] == latest_history_date].copy()
         latest_history_df = latest_history_df.reset_index(drop=True)
-        latest_history_df = latest_history_df.drop(columns=['Date'])
+        latest_history_df['AvgPercentReturn'] = (
+            (latest_history_df['TotalValue'] - latest_history_df['TotalCostBasis'])
+            / latest_history_df['TotalCostBasis'] * 100)
+        latest_history_df = latest_history_df.drop(
+            columns=['Date', 'TotalValue', 'TotalCostBasis'])
         summary_df = summary_df.merge(latest_history_df, on=dimension, how='left')
         
         summary_df = summary_df.round(2)
