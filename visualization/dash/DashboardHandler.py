@@ -78,9 +78,12 @@ class DashboardHandler:
             pd.to_datetime(self.portfolio_history_df['Date'])
         self.portfolio_history_df = self.portfolio_history_df.set_index('Date')
         
-        # Add current value to portfolio history
+        # Add current value to portfolio history (carry forward the latest cost
+        # basis — portfolio_history_df now has Value AND CostBasis columns, so a
+        # scalar assignment would wrongly overwrite both).
+        today_cost_basis = float(self.portfolio_history_df['CostBasis'].iloc[-1])
         self.portfolio_history_df.loc[pd.to_datetime('today')] = \
-            self.current_portfolio_value
+            [self.current_portfolio_value, today_cost_basis]
 
         # Get and set portfolio milestones
         self.portfolio_milestones = self.get_portfolio_milestones()
