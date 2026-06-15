@@ -7,21 +7,26 @@ ASSET_EVENTS = QUANTITY_ASSET_EVENTS + NON_QUANTITY_ASSET_EVENTS
 MASTER_LOG_COLUMNS = ['Date', 'Symbol', 'Action', 'Quantity', 
                       'Dividend', 'Multiplier', 'Acquirer']
 
+# NOTE: pandas 2.2+ removed the bare 'M'/'Q'/'Y'/'BM'/'BQ' aliases (ambiguous
+# with minute/etc). Month/quarter/year-end now require the explicit '...E' forms
+# ('ME', 'QE', 'YE', 'BME', 'BQE', 'BYE'). These are date-offset aliases used by
+# date_range()/asfreq()/to_offset(); do NOT pass them to pd.Period(), which
+# still uses the period aliases ('M'/'Q'/'Y').
 CADENCE_MAP = {
-    'daily': '1D',
-    'weekly': '1W',
-    'monthly': '1M',
-    'quarterly': '3M',
-    'yearly': '1Y',
+    'daily': 'D',
+    'weekly': 'W',
+    'monthly': 'ME',
+    'quarterly': 'QE',
+    'yearly': 'YE',
 }
 
 BUSINESS_CADENCE_MAP = {
     'daily': 'B',
     'weekly': 'W-FRI',
-    'monthly': 'BM',
-    'quarterly': 'BQ',
-    'half-yearly': '2BQ',
-    'yearly': 'BY',
+    'monthly': 'BME',
+    'quarterly': 'BQE',
+    'half-yearly': '2BQE',
+    'yearly': 'BYE',
 }
 
 # Symbols which are not currently listed

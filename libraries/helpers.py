@@ -31,6 +31,7 @@ from libraries.globals import (NON_QUANTITY_ASSET_EVENTS, ASSET_EVENTS,
                             MASTER_LOG_COLUMNS, CADENCE_MAP, 
                             ACCOUNT_TYPES)
 from pandas.tseries.offsets import BDay
+from pandas.tseries.frequencies import to_offset
 
 from diskcache import Cache
 
@@ -284,9 +285,11 @@ def gen_hist_quantities(asset_event_log_df: pd.DataFrame,
             last_date = pd.to_datetime('today').date()
 
         # Advance the last date to the end of the last date's period, to capture
-        # all actions
-        last_period = pd.Period(last_date, freq=CADENCE_MAP[cadence])
-        last_date = last_period.end_time.date()
+        # all actions. CADENCE_MAP holds date-offset aliases (ME/QE/YE/...), so
+        # roll forward to the period boundary instead of using pd.Period (which
+        # would require the incompatible period aliases M/Q/Y).
+        offset = to_offset(CADENCE_MAP[cadence])
+        last_date = offset.rollforward(pd.Timestamp(last_date)).date()
 
         # Fill in dataframe with every date in the range
         date_range = pd.date_range(start=first_date, end=last_date, 

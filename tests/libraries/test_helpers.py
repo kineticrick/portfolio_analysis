@@ -78,11 +78,16 @@ class TestHelpers(unittest.TestCase):
         self.assertTrue(all(date >= pd.Timestamp(start_date) 
                            for date in dated_result['Date']))
         
-        # Test different cadences
+        # Test different cadences (each must produce progressively fewer rows
+        # and not raise on the pandas frequency alias)
         weekly_result = gen_assets_historical_value(symbols, cadence='weekly')
         monthly_result = gen_assets_historical_value(symbols, cadence='monthly')
+        quarterly_result = gen_assets_historical_value(symbols, cadence='quarterly')
+        yearly_result = gen_assets_historical_value(symbols, cadence='yearly')
         self.assertTrue(len(weekly_result) < len(result))  # Should have fewer rows
         self.assertTrue(len(monthly_result) < len(weekly_result))
+        self.assertTrue(len(quarterly_result) < len(monthly_result))
+        self.assertTrue(len(yearly_result) < len(quarterly_result))
 
     def test_gen_aggregated_historical_value(self):
         symbols = ['AAPL']
