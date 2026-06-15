@@ -6,6 +6,7 @@ import pandas as pd
 
 from visualization.dash.portfolio_dashboard.globals import *
 from pandas.tseries.offsets import DateOffset
+from libraries.returns import rebase_to_window_start
 
 import dash_mantine_components as dmc
 
@@ -90,13 +91,17 @@ def update_assets_hist_graph(selected_rows, interval):
             selected_symbols = [row['Symbol'] for row in selected_rows]
             expanded_df = expanded_df[expanded_df['Symbol'].isin(selected_symbols)]
 
-        # Filter by interval
+        # Filter by interval, then rebase each asset's price to the window start
+        # so the line starts at 0% for the selected period.
         if interval != "Lifetime":
             interval_days = {k: v for (k, v) in DASH_HANDLER.performance_milestones}
             days = interval_days.get(interval, 365)
             offset = DateOffset(days=days)
             start_date = (pd.to_datetime('today') - offset).date()
-            expanded_df = expanded_df[expanded_df['Date'] >= start_date]
+            expanded_df = expanded_df[expanded_df['Date'] >= start_date].copy()
+            expanded_df = expanded_df.sort_values(['Symbol', 'Date'])
+            expanded_df['ClosingPrice % Change'] = expanded_df.groupby('Symbol')[
+                'ClosingPrice'].transform(rebase_to_window_start)
 
         if expanded_df.empty:
             return go.Figure().update_layout(
