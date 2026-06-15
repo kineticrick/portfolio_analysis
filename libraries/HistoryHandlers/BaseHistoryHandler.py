@@ -51,20 +51,22 @@ class BaseHistoryHandler:
 
             if latest_history_date < previous_business_date or \
                 (yesterday_weekend and latest_history_date < yesterday):
-                    # set_history() now returns the updated data, no need to re-read!
-                    updated_df = self.set_history(start_date=latest_history_date + Day(1))
-                    # Clear cache to ensure updated history is retrieved if needed later
+                    self.set_history(start_date=latest_history_date + Day(1))
+                    # Evict the stale history cache BEFORE re-reading, otherwise
+                    # get_history() returns the pre-update snapshot (the rows
+                    # set_history() just wrote stay hidden behind the cache).
                     mysql_cache_evict(MYSQL_CACHE_HISTORY_TAG)
+                    updated_df = self.get_history()
                     if updated_df is not None and not updated_df.empty:
                         # Merge new data with existing
                         self.history_df = updated_df
 
         # If dataframe is empty, update history from start of time to today
         else:
-            # set_history() returns the full history, no need to re-read!
-            self.history_df = self.set_history()
-            # Clear cache to ensure updated history is retrieved if needed later
+            self.set_history()
+            # Evict the stale history cache BEFORE re-reading (see note above).
             mysql_cache_evict(MYSQL_CACHE_HISTORY_TAG)
+            self.history_df = self.get_history()
             
         self.latest_history_date = self.get_latest_date()
     
