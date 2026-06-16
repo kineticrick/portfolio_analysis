@@ -84,28 +84,48 @@ def update_assets_table(sectors_sel, asset_types_sel, account_types_sel, geograp
 def update_assets_hist_graph(selected_rows, interval):
     try:
         # Use precomputed expanded data
-        expanded_df = DASH_HANDLER.portfolio_assets_history_expanded_df
+        expanded_df = DASH_HANDLER.portfolio_assets_history_expanded_df.copy()
+        expanded_df['Date'] = pd.to_datetime(expanded_df['Date'])
 
         # Filter by selected rows
         if selected_rows:
             selected_symbols = [row['Symbol'] for row in selected_rows]
             expanded_df = expanded_df[expanded_df['Symbol'].isin(selected_symbols)]
 
-        # Filter by interval, then rebase each asset's price to the window start
-        # so the line starts at 0% for the selected period.
+        # Append today's live price as the final point per asset, so the chart's
+        # right edge matches the live current price the table uses. (History
+        # excludes today because the trading day hasn't closed.)
+        today = pd.Timestamp('today').normalize()
+        summary = DASH_HANDLER.current_portfolio_summary_df.set_index('Symbol')
+        today_rows = []
+        for sym, sdf in expanded_df.groupby('Symbol'):
+            if sym in summary.index:
+                row = sdf.sort_values('Date').iloc[-1].copy()
+                row['Date'] = today
+                row['ClosingPrice'] = float(summary.loc[sym, 'Current Price'])
+                row['Value'] = float(summary.loc[sym, 'Current Value'])
+                today_rows.append(row)
+        if today_rows:
+            expanded_df = pd.concat(
+                [expanded_df, pd.DataFrame(today_rows)], ignore_index=True)
+
+        # Filter by interval
         if interval != "Lifetime":
             interval_days = {k: v for (k, v) in DASH_HANDLER.performance_milestones}
             days = interval_days.get(interval, 365)
             offset = DateOffset(days=days)
-            start_date = (pd.to_datetime('today') - offset).date()
-            expanded_df = expanded_df[expanded_df['Date'] >= start_date].copy()
-            expanded_df = expanded_df.sort_values(['Symbol', 'Date'])
-            expanded_df['ClosingPrice % Change'] = expanded_df.groupby('Symbol')[
-                'ClosingPrice'].transform(rebase_to_window_start)
+            start_date = (pd.to_datetime('today') - offset).normalize()
+            expanded_df = expanded_df[expanded_df['Date'] >= start_date]
 
         if expanded_df.empty:
             return go.Figure().update_layout(
                 title="No data available. Select assets from the table above.")
+
+        # Rebase each asset's price to the window start (Lifetime = full history)
+        # so the line starts at 0% and the right edge is the live return.
+        expanded_df = expanded_df.sort_values(['Symbol', 'Date'])
+        expanded_df['ClosingPrice % Change'] = expanded_df.groupby('Symbol')[
+            'ClosingPrice'].transform(rebase_to_window_start)
 
         fig = px.line(
             expanded_df,
