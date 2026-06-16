@@ -52,40 +52,65 @@ def create_dimension_tab(dimension_name, column_name, summary_df_attr, history_d
             return no_update, no_update, no_update
 
         data = _get_data()
-        history_df = getattr(DASH_HANDLER, history_df_attr)
+        full_history = getattr(DASH_HANDLER, history_df_attr)
+        interval_days = {k: v for (k, v) in DASH_HANDLER.performance_milestones}
 
+        if interval != "Lifetime":
+            days = interval_days[interval]
+            start_date = (pd.to_datetime('today') - DateOffset(days=days)).date()
+
+        # --- Table: make VW Return reflect the selected interval ------------
+        # For a window, the value-weighted return is the dimension's value at
+        # the window end vs its value at the window start. For Lifetime it is
+        # the value-weighted return on cost basis at the latest date.
+        if interval == "Lifetime":
+            latest = full_history[full_history['Date'] == full_history['Date'].max()]
+            vw = value_weighted_lifetime_return(
+                latest['TotalValue'], latest['TotalCostBasis'])
+            vw_map = dict(zip(latest[column_name], vw))
+        else:
+            window = full_history[full_history['Date'] >= start_date].sort_values('Date')
+            grp = window.groupby(column_name)['TotalValue']
+            vw_map = ((grp.last() / grp.first() - 1) * 100).to_dict()
+
+        row_data = []
+        for row in data['row_data']:
+            new_row = dict(row)
+            v = vw_map.get(row[column_name])
+            if v is not None and pd.notna(v):
+                new_row['VW Return'] = round(float(v), 2)
+            row_data.append(new_row)
+
+        # --- Chart ----------------------------------------------------------
+        chart_df = full_history
         # Filter by selected rows
         if selected_rows:
             selected_values = [row[column_name] for row in selected_rows]
-            history_df = history_df[history_df[column_name].isin(selected_values)]
+            chart_df = chart_df[chart_df[column_name].isin(selected_values)]
 
         # Derive the displayed series from the stored dollars.
         if interval == "Lifetime":
-            history_df = history_df.copy()
-            history_df['y'] = value_weighted_lifetime_return(
-                history_df['TotalValue'], history_df['TotalCostBasis'])
+            chart_df = chart_df.copy()
+            chart_df['y'] = value_weighted_lifetime_return(
+                chart_df['TotalValue'], chart_df['TotalCostBasis'])
         else:
-            interval_days = {k: v for (k, v) in DASH_HANDLER.performance_milestones}
-            days = interval_days[interval]
-            offset = DateOffset(days=days)
-            start_date = (pd.to_datetime('today') - offset).date()
-            history_df = history_df[history_df['Date'] >= start_date].copy()
-            history_df = history_df.sort_values(['Date'])
+            chart_df = chart_df[chart_df['Date'] >= start_date].copy()
+            chart_df = chart_df.sort_values(['Date'])
             # Rebase each dimension to ITS OWN value at the window start.
-            history_df['y'] = history_df.groupby(column_name)['TotalValue'].transform(
+            chart_df['y'] = chart_df.groupby(column_name)['TotalValue'].transform(
                 rebase_to_window_start)
 
         fig = px.line(
-            history_df,
-            x=history_df['Date'],
-            y=history_df['y'],
+            chart_df,
+            x=chart_df['Date'],
+            y=chart_df['y'],
             hover_data={'y': ':.2f%'},
-            color=history_df[column_name],
+            color=chart_df[column_name],
         )
         fig.update_layout(height=800)
         fig.update_yaxes(ticksuffix="%")
 
-        return data['column_defs'], data['row_data'], fig
+        return data['column_defs'], row_data, fig
 
     # Build the layout with empty table (populated on first tab visit)
     tab_layout = dmc.Container(
