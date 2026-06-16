@@ -96,7 +96,12 @@ def update_assets_hist_graph(selected_rows, interval):
         # right edge matches the live current price the table uses. (History
         # excludes today because the trading day hasn't closed.)
         today = pd.Timestamp('today').normalize()
-        summary = DASH_HANDLER.current_portfolio_summary_df.set_index('Symbol')
+        # Aggregate per symbol: a ticker held in multiple account types has
+        # several summary rows. Price is per-share (same), value is the total.
+        summary = (DASH_HANDLER.current_portfolio_summary_df
+                   .groupby('Symbol')
+                   .agg(**{'Current Price': ('Current Price', 'first'),
+                           'Current Value': ('Current Value', 'sum')}))
         today_rows = []
         for sym, sdf in expanded_df.groupby('Symbol'):
             if sym in summary.index:
