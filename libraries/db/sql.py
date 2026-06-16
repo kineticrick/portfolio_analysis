@@ -185,20 +185,21 @@ read_assets_history_columns = ['Date', 'Symbol', 'Quantity', 'CostBasis', 'Closi
 create_portfolio_history_table_sql = \
     ("CREATE TABLE IF NOT EXISTS portfolio_history ("
     "date DATE NOT NULL, "
-    "value DECIMAL(13, 2) NOT NULL, "
+    "value DECIMAL(15, 2) NOT NULL, "
+    "cost_basis DECIMAL(15, 2) NOT NULL, "
     "PRIMARY KEY (date))")
-    
+
 insert_ignore_portfolio_history_sql = \
     ("INSERT IGNORE INTO portfolio_history"
-     "(date, value) VALUES ('{date}','{value}')")
-    
+     "(date, value, cost_basis) VALUES ('{date}','{value}','{cost_basis}')")
+
 insert_update_portfolio_history_sql = \
     ("INSERT INTO portfolio_history"
-     "(date, value) VALUES ('{date}','{value}') "
-     "ON DUPLICATE KEY UPDATE date='{date}', value='{value}'")
-    
-read_portfolio_history_query = "SELECT * FROM portfolio_history"
-read_portfolio_history_columns = ['Date', 'Value']
+     "(date, value, cost_basis) VALUES ('{date}','{value}','{cost_basis}') "
+     "ON DUPLICATE KEY UPDATE date='{date}', value='{value}', cost_basis='{cost_basis}'")
+
+read_portfolio_history_query = "SELECT * FROM portfolio_history ORDER BY date"
+read_portfolio_history_columns = ['Date', 'Value', 'CostBasis']
 
 # HistoryHelper - assets_hypothetical_history table
 create_assets_hypothetical_history_table_sql = \
@@ -231,92 +232,100 @@ create_sectors_history_table_sql = \
     ("CREATE TABLE IF NOT EXISTS sectors_history ("
     "date DATE NOT NULL, "
     "sector VARCHAR(40) NOT NULL, "
-    "avg_percent_return DECIMAL(13, 2) NOT NULL, "
+    "total_value DECIMAL(15, 2) NOT NULL, "
+    "total_cost_basis DECIMAL(15, 2) NOT NULL, "
     "PRIMARY KEY (date, sector))")
-    
+
 insert_ignore_sectors_history_sql = \
     ("INSERT IGNORE INTO sectors_history"
-     "(date, sector, avg_percent_return) "
-     "VALUES ('{date}','{sector}', '{avg_percent_return}')")
-    
+     "(date, sector, total_value, total_cost_basis) "
+     "VALUES ('{date}','{sector}','{total_value}','{total_cost_basis}')")
+
 insert_update_sectors_history_sql = \
     ("INSERT INTO sectors_history"
-     "(date, sector, avg_percent_return) "
-     "VALUES ('{date}','{sector}', '{avg_percent_return}') "
+     "(date, sector, total_value, total_cost_basis) "
+     "VALUES ('{date}','{sector}','{total_value}','{total_cost_basis}') "
      "ON DUPLICATE KEY UPDATE "
-     "date='{date}', sector='{sector}', avg_percent_return='{avg_percent_return}'")
-    
+     "date='{date}', sector='{sector}', "
+     "total_value='{total_value}', total_cost_basis='{total_cost_basis}'")
+
 read_sectors_history_query = "SELECT * FROM sectors_history"
-read_sectors_history_columns = ['Date', 'Sector', 'AvgPercentReturn']
+read_sectors_history_columns = ['Date', 'Sector', 'TotalValue', 'TotalCostBasis']
 
 # AssetTypeHistoryHelper - asset_types_history table
 create_asset_types_history_table_sql = \
     ("CREATE TABLE IF NOT EXISTS asset_types_history ("
     "date DATE NOT NULL, "
     "asset_type VARCHAR(40) NOT NULL, "
-    "avg_percent_return DECIMAL(13, 2) NOT NULL, "
+    "total_value DECIMAL(15, 2) NOT NULL, "
+    "total_cost_basis DECIMAL(15, 2) NOT NULL, "
     "PRIMARY KEY (date, asset_type))")
-    
+
 insert_ignore_asset_types_history_sql = \
     ("INSERT IGNORE INTO asset_types_history"
-     "(date, asset_type, avg_percent_return) "
-     "VALUES ('{date}','{asset_type}', '{avg_percent_return}')")
-    
+     "(date, asset_type, total_value, total_cost_basis) "
+     "VALUES ('{date}','{asset_type}','{total_value}','{total_cost_basis}')")
+
 insert_update_asset_types_history_sql = \
     ("INSERT INTO asset_types_history"
-     "(date, asset_type, avg_percent_return) "
-     "VALUES ('{date}','{asset_type}', '{avg_percent_return}') "
+     "(date, asset_type, total_value, total_cost_basis) "
+     "VALUES ('{date}','{asset_type}','{total_value}','{total_cost_basis}') "
      "ON DUPLICATE KEY UPDATE "
-     "date='{date}', asset_type='{asset_type}', avg_percent_return='{avg_percent_return}'")
-    
+     "date='{date}', asset_type='{asset_type}', "
+     "total_value='{total_value}', total_cost_basis='{total_cost_basis}'")
+
 read_asset_types_history_query = "SELECT * FROM asset_types_history"
-read_asset_types_history_columns = ['Date', 'AssetType', 'AvgPercentReturn']
+read_asset_types_history_columns = ['Date', 'AssetType', 'TotalValue', 'TotalCostBasis']
 
 # AccountTypeHistoryHelper - account_types_history table
 create_account_types_history_table_sql = \
     ("CREATE TABLE IF NOT EXISTS account_types_history ("
     "date DATE NOT NULL, "
     "account_type VARCHAR(40) NOT NULL, "
-    "avg_percent_return DECIMAL(13, 2) NOT NULL, "
+    "total_value DECIMAL(15, 2) NOT NULL, "
+    "total_cost_basis DECIMAL(15, 2) NOT NULL, "
     "PRIMARY KEY (date, account_type))")
-    
+
 insert_ignore_account_types_history_sql = \
     ("INSERT IGNORE INTO account_types_history"
-     "(date, account_type, avg_percent_return) "
-     "VALUES ('{date}','{account_type}', '{avg_percent_return}')")
-     
+     "(date, account_type, total_value, total_cost_basis) "
+     "VALUES ('{date}','{account_type}','{total_value}','{total_cost_basis}')")
+
 insert_update_account_types_history_sql = \
     ("INSERT INTO account_types_history"
-     "(date, account_type, avg_percent_return) "
-     "VALUES ('{date}','{account_type}', '{avg_percent_return}') "
+     "(date, account_type, total_value, total_cost_basis) "
+     "VALUES ('{date}','{account_type}','{total_value}','{total_cost_basis}') "
      "ON DUPLICATE KEY UPDATE "
-     "date='{date}', account_type='{account_type}', avg_percent_return='{avg_percent_return}'")
-     
+     "date='{date}', account_type='{account_type}', "
+     "total_value='{total_value}', total_cost_basis='{total_cost_basis}'")
+
 read_account_types_history_query = "SELECT * FROM account_types_history"
-read_account_types_history_columns = ['Date', 'AccountType', 'AvgPercentReturn']
+read_account_types_history_columns = ['Date', 'AccountType', 'TotalValue', 'TotalCostBasis']
 
 # GeographyHistoryHelper - geography_history table
 create_geography_history_table_sql = \
     ("CREATE TABLE IF NOT EXISTS geography_history ("
     "date DATE NOT NULL, "
     "geography VARCHAR(40) NOT NULL, "
-    "avg_percent_return DECIMAL(13, 2) NOT NULL, "
+    "total_value DECIMAL(15, 2) NOT NULL, "
+    "total_cost_basis DECIMAL(15, 2) NOT NULL, "
     "PRIMARY KEY (date, geography))")
-    
+
 insert_ignore_geography_history_sql = \
     ("INSERT IGNORE INTO geography_history"
-     "(date, geography, avg_percent_return) "
-     "VALUES ('{date}','{geography}', '{avg_percent_return}')")
-    
+     "(date, geography, total_value, total_cost_basis) "
+     "VALUES ('{date}','{geography}','{total_value}','{total_cost_basis}')")
+
 insert_update_geography_history_sql = \
     ("INSERT INTO geography_history"
-     "(date, geography, avg_percent_return) "
-     "VALUES ('{date}','{geography}', '{avg_percent_return}') "
+     "(date, geography, total_value, total_cost_basis) "
+     "VALUES ('{date}','{geography}','{total_value}','{total_cost_basis}') "
      "ON DUPLICATE KEY UPDATE "
-     "date='{date}', geography='{geography}', avg_percent_return='{avg_percent_return}'")   
-     
+     "date='{date}', geography='{geography}', "
+     "total_value='{total_value}', total_cost_basis='{total_cost_basis}'")
+
 read_geography_history_query = "SELECT * FROM geography_history"
-read_geography_history_columns = ['Date', 'Geography', 'AvgPercentReturn']
+read_geography_history_columns = ['Date', 'Geography', 'TotalValue', 'TotalCostBasis']
 
 # ============================================================
 # Index definitions for performance optimization

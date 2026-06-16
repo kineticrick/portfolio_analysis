@@ -41,14 +41,17 @@ class SectorHistoryHandler(BaseHistoryHandler):
         # OPTIMIZATION: Batch insert using executemany() instead of individual INSERTs
         with MysqlDB(dbcfg) as db:
             if overwrite:
-                sql = """REPLACE INTO sectors_history (date, sector, avg_percent_return)
-                         VALUES (%s, %s, %s)"""
+                sql = """REPLACE INTO sectors_history
+                         (date, sector, total_value, total_cost_basis)
+                         VALUES (%s, %s, %s, %s)"""
             else:
-                sql = """INSERT IGNORE INTO sectors_history (date, sector, avg_percent_return)
-                         VALUES (%s, %s, %s)"""
+                sql = """INSERT IGNORE INTO sectors_history
+                         (date, sector, total_value, total_cost_basis)
+                         VALUES (%s, %s, %s, %s)"""
 
             values = [
-                (row['Date'], row['Sector'], float(row['AvgPercentReturn']))
+                (row['Date'], row['Sector'],
+                 float(row['total_value']), float(row['total_cost_basis']))
                 for _, row in sectors_historical_data_df.iterrows()
             ]
 
@@ -65,7 +68,7 @@ class SectorHistoryHandler(BaseHistoryHandler):
         
         Returns:
             history_df (pd.DataFrame): 
-                Date, Sector, AvgPercentReturn
+                Date, Sector, TotalValue, TotalCostBasis
         """
         history_df = mysql_to_df(read_sectors_history_query, 
                                  read_sectors_history_columns, dbcfg, cached=True)

@@ -320,14 +320,16 @@ class DemoDashboardHandler(DashboardHandler):
         # ================================================================
         port_hist = (
             self.portfolio_assets_history_df
-            .groupby('Date')['Value'].sum()
+            .groupby('Date')
+            .agg(Value=('Value', 'sum'), CostBasis=('CostBasis', 'sum'))
             .reset_index()
         )
         port_hist['Date'] = pd.to_datetime(port_hist['Date'])
         self.portfolio_history_df = port_hist.set_index('Date')
-        # Append today's value (mirrors DashboardHandler.__init__ pattern)
+        # Append today's value + latest cost basis (mirrors DashboardHandler pattern)
+        today_cost_basis = float(port_hist['CostBasis'].iloc[-1])
         self.portfolio_history_df.loc[pd.to_datetime('today')] = \
-            self.current_portfolio_value
+            [self.current_portfolio_value, today_cost_basis]
 
         # ================================================================
         # 5. Pre-populate helpers._entities_df_cache
@@ -457,14 +459,14 @@ class DemoDashboardHandler(DashboardHandler):
             acct_map = self.current_portfolio_summary_df[['Symbol', 'AccountType']]
             expanded = expanded.merge(acct_map, on='Symbol', how='left')
 
-        # Average Value % Change per (Date, dimension-value) — mirrors
-        # the AvgPercentReturn column produced by the real dimension handlers.
+        # Sum dollars per (Date, dimension-value) — mirrors the real handlers'
+        # total_value/total_cost_basis columns.
         dim_history = (
             expanded
-            .groupby(['Date', dimension])['Value % Change']
-            .mean()
+            .groupby(['Date', dimension])
+            .agg(TotalValue=('Value', 'sum'),
+                 TotalCostBasis=('CostBasis', 'sum'))
             .reset_index()
-            .rename(columns={'Value % Change': 'AvgPercentReturn'})
         )
         # Convert to datetime.date objects (object dtype) to match the real
         # dimension handler output — the tab factory compares Date against a

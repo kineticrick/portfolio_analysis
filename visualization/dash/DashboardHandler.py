@@ -78,9 +78,12 @@ class DashboardHandler:
             pd.to_datetime(self.portfolio_history_df['Date'])
         self.portfolio_history_df = self.portfolio_history_df.set_index('Date')
         
-        # Add current value to portfolio history
+        # Add current value to portfolio history (carry forward the latest cost
+        # basis — portfolio_history_df now has Value AND CostBasis columns, so a
+        # scalar assignment would wrongly overwrite both).
+        today_cost_basis = float(self.portfolio_history_df['CostBasis'].iloc[-1])
         self.portfolio_history_df.loc[pd.to_datetime('today')] = \
-            self.current_portfolio_value
+            [self.current_portfolio_value, today_cost_basis]
 
         # Get and set portfolio milestones
         self.portfolio_milestones = self.get_portfolio_milestones()
@@ -573,7 +576,7 @@ class DashboardHandler:
             - Current Market Value
             - % of Total Portfolio
             - Lifetime Return (Sum Cost Basis vs Sum Market Value)
-            - Avg Daily Return (Avg of all assets daily return)
+            - VW Return (value-weighted return from latest history dollars)
             - Avg Dividends Yield (% - Avg of all assets dividend yield)
             - Total Dividends ($ - Sum of all assets dividends)
             - TODO: Milestone Returns (1d, 1w, 1m, 3m, 6m, 1y, 2y, 3y, 5y)
@@ -605,13 +608,17 @@ class DashboardHandler:
             (summary_df['Current Value'] - summary_df['Cost Basis']) \
                 / summary_df['Cost Basis'] * 100
         
-        # For avg daily return, get latest daily return for each asset 
-        # from history_df        
+        # Merge the latest history row, deriving the value-weighted return from
+        # the stored dollars (history now stores TotalValue/TotalCostBasis).
         latest_history_date = history_df['Date'].max()
         latest_history_df = history_df.loc[
-            history_df['Date'] == latest_history_date] 
+            history_df['Date'] == latest_history_date].copy()
         latest_history_df = latest_history_df.reset_index(drop=True)
-        latest_history_df = latest_history_df.drop(columns=['Date'])
+        latest_history_df['VW Return'] = (
+            (latest_history_df['TotalValue'] - latest_history_df['TotalCostBasis'])
+            / latest_history_df['TotalCostBasis'] * 100)
+        latest_history_df = latest_history_df.drop(
+            columns=['Date', 'TotalValue', 'TotalCostBasis'])
         summary_df = summary_df.merge(latest_history_df, on=dimension, how='left')
         
         summary_df = summary_df.round(2)

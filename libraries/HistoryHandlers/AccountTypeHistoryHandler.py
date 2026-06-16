@@ -48,14 +48,17 @@ class AccountTypeHistoryHandler(BaseHistoryHandler):
         # OPTIMIZATION: Batch insert using executemany() instead of individual INSERTs
         with MysqlDB(dbcfg) as db:
             if overwrite:
-                sql = """REPLACE INTO account_types_history (date, account_type, avg_percent_return)
-                         VALUES (%s, %s, %s)"""
+                sql = """REPLACE INTO account_types_history
+                         (date, account_type, total_value, total_cost_basis)
+                         VALUES (%s, %s, %s, %s)"""
             else:
-                sql = """INSERT IGNORE INTO account_types_history (date, account_type, avg_percent_return)
-                         VALUES (%s, %s, %s)"""
+                sql = """INSERT IGNORE INTO account_types_history
+                         (date, account_type, total_value, total_cost_basis)
+                         VALUES (%s, %s, %s, %s)"""
 
             values = [
-                (row['Date'], row['AccountType'], float(row['AvgPercentReturn']))
+                (row['Date'], row['AccountType'],
+                 float(row['total_value']), float(row['total_cost_basis']))
                 for _, row in account_types_historical_data_df.iterrows()
             ]
 
@@ -72,7 +75,7 @@ class AccountTypeHistoryHandler(BaseHistoryHandler):
         
         Returns:
             history_df (pd.DataFrame): 
-                Date, AccountType, AvgPercentReturn
+                Date, AccountType, TotalValue, TotalCostBasis
         """
         history_df = mysql_to_df(read_account_types_history_query, 
                                  read_account_types_history_columns, dbcfg, cached=True)

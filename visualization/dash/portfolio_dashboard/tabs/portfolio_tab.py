@@ -5,6 +5,7 @@ import plotly.express as px
 import pandas as pd
 from visualization.dash.portfolio_dashboard.globals import *
 from pandas.tseries.offsets import DateOffset
+from libraries.returns import value_weighted_lifetime_return, rebase_to_window_start
 import dash_mantine_components as dmc
 
 # Build column defs for the static milestones table
@@ -28,24 +29,29 @@ def update_port_hist_graph(interval):
             date = pd.to_datetime('today') - offset
             date = date.strftime('%Y-%m-%d')
 
-        port_hist_df = port_hist_df[port_hist_df.index >= date]
+        port_hist_df = port_hist_df[port_hist_df.index >= date].copy()
 
         if port_hist_df.empty:
             return go.Figure().update_layout(title="No data available for selected interval")
 
         port_hist_df['Value'] = port_hist_df['Value'].astype(float)
+        port_hist_df['CostBasis'] = port_hist_df['CostBasis'].astype(float)
 
-        port_hist_df['perc_change'] = \
-            round((port_hist_df['Value'] - port_hist_df['Value'].iloc[0]) /
-                  port_hist_df['Value'].iloc[0] * 100, 2)
+        if interval == "Lifetime":
+            # Value-weighted return on invested capital
+            port_hist_df['y'] = value_weighted_lifetime_return(
+                port_hist_df['Value'], port_hist_df['CostBasis'])
+        else:
+            port_hist_df['y'] = rebase_to_window_start(port_hist_df['Value'])
 
         fig = px.line(
             port_hist_df,
             x=port_hist_df.index,
-            y=port_hist_df['Value'],
-            hover_data={'Value': ':$,.2f', 'perc_change': ':.2f%'},
+            y=port_hist_df['y'],
+            hover_data={'Value': ':$,.2f', 'y': ':.2f%'},
             markers=True,
         )
+        fig.update_yaxes(ticksuffix="%")
 
         fig.update_layout(transition_duration=500, hovermode='y unified',
                           xaxis=dict(rangeslider=dict(visible=True)))

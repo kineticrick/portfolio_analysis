@@ -49,39 +49,31 @@ class PortfolioHistoryHandler(BaseHistoryHandler):
             # Get asset history from DB into dataframe
             self.assets_history_df = asset_history_handler.history_df
 
-        # Aggregate over dates to get total portfolio value for each day
-        daily_portfolio_value_df = self.assets_history_df.groupby('Date')['Value'].sum()
+        # Aggregate over dates to get total portfolio value AND cost basis per day
+        daily_df = self.assets_history_df.groupby('Date').agg(
+            Value=('Value', 'sum'),
+            CostBasis=('CostBasis', 'sum'),
+        ).reset_index()
 
-        # Convert from Series to DataFrame
-        daily_portfolio_value_df = daily_portfolio_value_df.reset_index()
-
-        # Set date column as index
-        daily_portfolio_value_df['Date'] = pd.to_datetime(daily_portfolio_value_df['Date'])
-        # daily_portfolio_value_df = daily_portfolio_value_df.set_index('Date')
+        daily_df['Date'] = pd.to_datetime(daily_df['Date'])
 
         # Filter to just start_date to today
         if start_date is not None:
-            daily_portfolio_value_df = \
-                daily_portfolio_value_df[daily_portfolio_value_df['Date'] >= start_date]
-
-        column_conversion_map = {
-            'date': 'Date',
-            'value': 'Value',
-        }
+            daily_df = daily_df[daily_df['Date'] >= start_date]
 
         # OPTIMIZATION: Batch insert using executemany() instead of individual INSERTs
         with MysqlDB(dbcfg) as db:
             if overwrite:
-                sql = """REPLACE INTO portfolio_history (date, value)
-                         VALUES (%s, %s)"""
+                sql = """REPLACE INTO portfolio_history (date, value, cost_basis)
+                         VALUES (%s, %s, %s)"""
             else:
-                sql = """INSERT IGNORE INTO portfolio_history (date, value)
-                         VALUES (%s, %s)"""
+                sql = """INSERT IGNORE INTO portfolio_history (date, value, cost_basis)
+                         VALUES (%s, %s, %s)"""
 
             # Prepare values as list of tuples
             values = [
-                (row['Date'].date(), float(row['Value']))
-                for _, row in daily_portfolio_value_df.iterrows()
+                (row['Date'].date(), float(row['Value']), float(row['CostBasis']))
+                for _, row in daily_df.iterrows()
             ]
 
             if values:
@@ -96,8 +88,8 @@ class PortfolioHistoryHandler(BaseHistoryHandler):
         Get portfolio history from DB and place into dataframe
         
         Returns:
-            history_df (pd.DataFrame): 
-                Date, Value
+            history_df (pd.DataFrame):
+                Date, Value, CostBasis
         """
         history_df = mysql_to_df(read_portfolio_history_query, 
                                  read_portfolio_history_columns, dbcfg, cached=True)

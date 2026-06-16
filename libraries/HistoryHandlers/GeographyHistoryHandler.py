@@ -41,14 +41,17 @@ class GeographyHistoryHandler(BaseHistoryHandler):
         # OPTIMIZATION: Batch insert using executemany() instead of individual INSERTs
         with MysqlDB(dbcfg) as db:
             if overwrite:
-                sql = """REPLACE INTO geography_history (date, geography, avg_percent_return)
-                         VALUES (%s, %s, %s)"""
+                sql = """REPLACE INTO geography_history
+                         (date, geography, total_value, total_cost_basis)
+                         VALUES (%s, %s, %s, %s)"""
             else:
-                sql = """INSERT IGNORE INTO geography_history (date, geography, avg_percent_return)
-                         VALUES (%s, %s, %s)"""
+                sql = """INSERT IGNORE INTO geography_history
+                         (date, geography, total_value, total_cost_basis)
+                         VALUES (%s, %s, %s, %s)"""
 
             values = [
-                (row['Date'], row['Geography'], float(row['AvgPercentReturn']))
+                (row['Date'], row['Geography'],
+                 float(row['total_value']), float(row['total_cost_basis']))
                 for _, row in geography_historical_data_df.iterrows()
             ]
 
@@ -65,7 +68,7 @@ class GeographyHistoryHandler(BaseHistoryHandler):
         
         Returns:
             history_df (pd.DataFrame): 
-                Date, Geography, AvgPercentReturn
+                Date, Geography, TotalValue, TotalCostBasis
         """
         history_df = mysql_to_df(read_geography_history_query, 
                                  read_geography_history_columns, dbcfg, cached=True)

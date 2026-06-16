@@ -4,6 +4,7 @@ import plotly.express as px
 import pandas as pd
 from pandas.tseries.offsets import DateOffset
 
+from libraries.returns import value_weighted_lifetime_return, rebase_to_window_start
 from visualization.dash.portfolio_dashboard.globals import *
 import dash_mantine_components as dmc
 
@@ -58,19 +59,27 @@ def create_dimension_tab(dimension_name, column_name, summary_df_attr, history_d
             selected_values = [row[column_name] for row in selected_rows]
             history_df = history_df[history_df[column_name].isin(selected_values)]
 
-        # Filter by interval
-        if interval != "Lifetime":
+        # Derive the displayed series from the stored dollars.
+        if interval == "Lifetime":
+            history_df = history_df.copy()
+            history_df['y'] = value_weighted_lifetime_return(
+                history_df['TotalValue'], history_df['TotalCostBasis'])
+        else:
             interval_days = {k: v for (k, v) in DASH_HANDLER.performance_milestones}
             days = interval_days[interval]
             offset = DateOffset(days=days)
             start_date = (pd.to_datetime('today') - offset).date()
-            history_df = history_df[history_df['Date'] >= start_date]
+            history_df = history_df[history_df['Date'] >= start_date].copy()
+            history_df = history_df.sort_values(['Date'])
+            # Rebase each dimension to ITS OWN value at the window start.
+            history_df['y'] = history_df.groupby(column_name)['TotalValue'].transform(
+                rebase_to_window_start)
 
         fig = px.line(
             history_df,
             x=history_df['Date'],
-            y=history_df['AvgPercentReturn'],
-            hover_data={'AvgPercentReturn': ':.2f%'},
+            y=history_df['y'],
+            hover_data={'y': ':.2f%'},
             color=history_df[column_name],
         )
         fig.update_layout(height=800)
