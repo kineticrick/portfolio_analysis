@@ -576,7 +576,7 @@ class DashboardHandler:
             - Current Market Value
             - % of Total Portfolio
             - Lifetime Return (Sum Cost Basis vs Sum Market Value)
-            - Avg Daily Return (Avg of all assets daily return)
+            - VW Return (value-weighted return from latest history dollars)
             - Avg Dividends Yield (% - Avg of all assets dividend yield)
             - Total Dividends ($ - Sum of all assets dividends)
             - TODO: Milestone Returns (1d, 1w, 1m, 3m, 6m, 1y, 2y, 3y, 5y)
@@ -614,7 +614,7 @@ class DashboardHandler:
         latest_history_df = history_df.loc[
             history_df['Date'] == latest_history_date].copy()
         latest_history_df = latest_history_df.reset_index(drop=True)
-        latest_history_df['AvgPercentReturn'] = (
+        latest_history_df['VW Return'] = (
             (latest_history_df['TotalValue'] - latest_history_df['TotalCostBasis'])
             / latest_history_df['TotalCostBasis'] * 100)
         latest_history_df = latest_history_df.drop(
