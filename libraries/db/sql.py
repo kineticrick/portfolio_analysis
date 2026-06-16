@@ -198,7 +198,7 @@ insert_update_portfolio_history_sql = \
      "(date, value, cost_basis) VALUES ('{date}','{value}','{cost_basis}') "
      "ON DUPLICATE KEY UPDATE date='{date}', value='{value}', cost_basis='{cost_basis}'")
 
-read_portfolio_history_query = "SELECT * FROM portfolio_history"
+read_portfolio_history_query = "SELECT * FROM portfolio_history ORDER BY date"
 read_portfolio_history_columns = ['Date', 'Value', 'CostBasis']
 
 # HistoryHelper - assets_hypothetical_history table

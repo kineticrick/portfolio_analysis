@@ -68,7 +68,7 @@ class SectorHistoryHandler(BaseHistoryHandler):
         
         Returns:
             history_df (pd.DataFrame): 
-                Date, Sector, AvgPercentReturn
+                Date, Sector, TotalValue, TotalCostBasis
         """
         history_df = mysql_to_df(read_sectors_history_query, 
                                  read_sectors_history_columns, dbcfg, cached=True)

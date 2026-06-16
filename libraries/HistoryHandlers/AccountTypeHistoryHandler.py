@@ -75,7 +75,7 @@ class AccountTypeHistoryHandler(BaseHistoryHandler):
         
         Returns:
             history_df (pd.DataFrame): 
-                Date, AccountType, AvgPercentReturn
+                Date, AccountType, TotalValue, TotalCostBasis
         """
         history_df = mysql_to_df(read_account_types_history_query, 
                                  read_account_types_history_columns, dbcfg, cached=True)

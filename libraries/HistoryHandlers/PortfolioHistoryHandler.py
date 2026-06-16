@@ -88,8 +88,8 @@ class PortfolioHistoryHandler(BaseHistoryHandler):
         Get portfolio history from DB and place into dataframe
         
         Returns:
-            history_df (pd.DataFrame): 
-                Date, Value
+            history_df (pd.DataFrame):
+                Date, Value, CostBasis
         """
         history_df = mysql_to_df(read_portfolio_history_query, 
                                  read_portfolio_history_columns, dbcfg, cached=True)

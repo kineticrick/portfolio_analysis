@@ -68,7 +68,7 @@ class AssetTypeHistoryHandler(BaseHistoryHandler):
         
         Returns:
             history_df (pd.DataFrame): 
-                Date, AssetType, AvgPercentReturn
+                Date, AssetType, TotalValue, TotalCostBasis
         """
         history_df = mysql_to_df(read_asset_types_history_query, 
                                  read_asset_types_history_columns, dbcfg, cached=True)

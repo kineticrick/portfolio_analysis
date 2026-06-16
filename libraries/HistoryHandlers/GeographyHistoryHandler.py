@@ -68,7 +68,7 @@ class GeographyHistoryHandler(BaseHistoryHandler):
         
         Returns:
             history_df (pd.DataFrame): 
-                Date, Geography, AvgPercentReturn
+                Date, Geography, TotalValue, TotalCostBasis
         """
         history_df = mysql_to_df(read_geography_history_query, 
                                  read_geography_history_columns, dbcfg, cached=True)
