@@ -51,6 +51,7 @@ class TestEngine(unittest.TestCase):
         text, figs = engine.run(provider, self.h, prior_turns=[],
                                 user_message="loop", view_context={})
         self.assertIn("too many", text.lower())
+        self.assertEqual(len(provider.calls), 5)
 
     def test_prior_turns_included_in_messages(self):
         provider = ScriptedProvider([
@@ -63,3 +64,18 @@ class TestEngine(unittest.TestCase):
         sent = provider.calls[0]["messages"]
         self.assertEqual(sent[0], {"role": "user", "content": "earlier"})
         self.assertEqual(sent[-1], {"role": "user", "content": "now"})
+
+    def test_build_system_only_interval_omits_none_dimension(self):
+        sys = engine._build_system({"interval": "6m"})
+        self.assertIn("interval=6m", sys)
+        self.assertNotIn("None", sys)
+        self.assertNotIn("dimension=", sys)
+
+    def test_build_system_both_fields(self):
+        sys = engine._build_system({"dimension": "Sector", "interval": "6m"})
+        self.assertIn("dimension=Sector", sys)
+        self.assertIn("interval=6m", sys)
+
+    def test_build_system_empty_returns_base(self):
+        from libraries.chat.config import SYSTEM_PROMPT
+        self.assertEqual(engine._build_system({}), SYSTEM_PROMPT)
