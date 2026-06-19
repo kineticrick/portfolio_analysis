@@ -36,6 +36,7 @@ from visualization.dash.portfolio_dashboard.tabs import (
                                                          asset_types_tab,
                                                          account_types_tab,
                                                          geography_tab)
+from visualization.dash.portfolio_dashboard.tabs.chat_tab import chat_tab
 
 
 print("Loading Portfolio Tabs...")
@@ -52,6 +53,7 @@ _tabs = dmc.Tabs(
             dmc.TabsTab('Geography', value='geography-dash-tab'),
             dmc.TabsTab('Assets', value='assets-dash-tab'),
             dmc.TabsTab('Hypotheticals', value='hypotheticals-dash-tab'),
+            dmc.TabsTab('Chat', value='chat-dash-tab'),
         ]),
         dmc.TabsPanel(portfolio_tab, value='portfolio-dash-tab'),
         dmc.TabsPanel(sectors_tab, value='sectors-dash-tab'),
@@ -60,6 +62,7 @@ _tabs = dmc.Tabs(
         dmc.TabsPanel(geography_tab, value='geography-dash-tab'),
         dmc.TabsPanel(assets_tab, value='assets-dash-tab'),
         dmc.TabsPanel(hypotheticals_tab, value='hypotheticals-dash-tab'),
+        dmc.TabsPanel(chat_tab, value='chat-dash-tab'),
     ],
 )
 
