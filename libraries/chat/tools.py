@@ -158,6 +158,11 @@ def show_history_line(handler, target_type, targets, interval="Lifetime"):
         return f"Price history for {', '.join(targets)} over {interval}.", fig
 
     if target_type == "dimension":
+        if not targets:
+            return "targets must contain exactly one dimension name.", None
+        if targets[0] not in _DIMENSION_ATTRS:
+            return (f"Unknown dimension '{targets[0]}'. "
+                    f"Valid: {list(_DIMENSION_ATTRS)}."), None
         summary_attr, history_attr = _DIMENSION_ATTRS[targets[0]]
         df = getattr(handler, history_attr).copy()
         df["Date"] = pd.to_datetime(df["Date"])

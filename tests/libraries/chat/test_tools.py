@@ -120,6 +120,27 @@ class TestChartTools(unittest.TestCase):
         self.assertIsInstance(fig, go.Figure)
         self.assertEqual(len(fig.data), 2)
 
+    def test_show_history_line_dimension(self):
+        text, fig = tools.show_history_line(
+            self.h, target_type="dimension", targets=["Sector"],
+            interval="Lifetime")
+        self.assertIsInstance(fig, go.Figure)
+        # Two sectors in the fake history (Tech, Health).
+        self.assertEqual(len(fig.data), 2)
+
+    def test_show_history_line_dimension_empty_targets(self):
+        text, fig = tools.show_history_line(
+            self.h, target_type="dimension", targets=[], interval="Lifetime")
+        self.assertIsNone(fig)
+        self.assertIn("targets", text)
+
+    def test_show_history_line_dimension_unknown(self):
+        text, fig = tools.show_history_line(
+            self.h, target_type="dimension", targets=["Bogus"],
+            interval="Lifetime")
+        self.assertIsNone(fig)
+        self.assertIn("Unknown dimension", text)
+
     def test_tool_schemas_cover_all_tools(self):
         names = {s["name"] for s in tools.TOOL_SCHEMAS}
         self.assertEqual(names, set(tools._TOOLS.keys()))
