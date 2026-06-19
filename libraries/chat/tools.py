@@ -5,6 +5,8 @@ dispatch() routes by name and converts exceptions into error strings so the mode
 can recover or ask the user to clarify.
 """
 
+import pandas as pd
+
 from libraries.chat import chart_builders
 from libraries.chat.config import INTERVALS, DIMENSIONS
 
@@ -90,9 +92,9 @@ def get_dimension_breakdown(handler, dimension, interval="Lifetime"):
         return out.to_string(index=False), None
     # Window: value-weighted return = TotalValue(end) / TotalValue(start) - 1.
     days = {k: v for (k, v) in handler.performance_milestones}[interval]
-    import pandas as pd
     start = (pd.to_datetime("today") - pd.DateOffset(days=days)).normalize()
-    hist = getattr(handler, history_attr)
+    hist = getattr(handler, history_attr).copy()
+    hist["Date"] = pd.to_datetime(hist["Date"])
     window = hist[hist["Date"] >= start].sort_values("Date")
     grp = window.groupby(dimension)["TotalValue"]
     vw = ((grp.last() / grp.first() - 1) * 100).round(2)

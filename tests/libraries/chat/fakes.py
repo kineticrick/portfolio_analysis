@@ -1,5 +1,7 @@
 """Test doubles for chat tools and engine — no DB, no network, deterministic."""
 
+import datetime
+
 import pandas as pd
 
 from libraries.chat.provider import LLMResponse
@@ -75,8 +77,8 @@ def make_fake_handler():
 
         # Dimension history (windowed VW Return computed from these dollars).
         sectors_history_df = pd.DataFrame({
-            "Date": pd.to_datetime(["2026-01-01", "2026-01-01",
-                                    "2026-06-19", "2026-06-19"]),
+            "Date": [datetime.date(2026, 1, 1), datetime.date(2026, 1, 1),
+                     datetime.date(2026, 6, 19), datetime.date(2026, 6, 19)],
             "Sector": ["Tech", "Health", "Tech", "Health"],
             "TotalValue": [2400.0, 400.0, 3000.0, 500.0],
             "TotalCostBasis": [3000.0, 400.0, 3000.0, 400.0],
