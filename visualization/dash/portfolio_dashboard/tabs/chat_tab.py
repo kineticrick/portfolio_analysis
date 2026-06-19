@@ -51,7 +51,7 @@ def _render_thread(thread):
     prevent_initial_call=True,
 )
 def on_send(n_clicks, user_text, history, thread, view_context):
-    if not user_text:
+    if not user_text or not user_text.strip():
         return no_update, no_update, no_update
     history = history or []
     thread = thread or []
@@ -94,7 +94,7 @@ chat_tab = dmc.Container(
         html.Div(id="chat-thread", style={"minHeight": "400px",
                                           "marginBottom": "1rem"}),
         dmc.Group([
-            dcc.Input(id="chat-input", type="text", debounce=True,
+            dcc.Input(id="chat-input", type="text",
                       placeholder="e.g. Top 5 assets in my discretionary account "
                                   "over the last 6 months",
                       style={"flex": 1}),
