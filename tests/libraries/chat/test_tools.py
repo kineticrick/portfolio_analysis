@@ -73,3 +73,24 @@ class TestDataTools(unittest.TestCase):
         text, fig = tools.dispatch(self.h, "get_asset_detail", {})
         self.assertIsNone(fig)
         self.assertTrue(text.lower().startswith("error"))
+
+    def test_dimension_breakdown_lifetime_uses_summary_vw(self):
+        text, fig = tools.get_dimension_breakdown(
+            self.h, dimension="Sector", interval="Lifetime")
+        self.assertIsNone(fig)
+        self.assertIn("Health", text)
+        self.assertIn("25.0", text)  # Health VW Return from summary df
+
+    def test_dimension_breakdown_window_uses_history(self):
+        text, fig = tools.get_dimension_breakdown(
+            self.h, dimension="Sector", interval="6m")
+        # Tech grew 2400 -> 3000 over the window = 25.0%.
+        self.assertIn("Tech", text)
+        self.assertIn("25.0", text)
+
+    def test_filter_holdings_returns_matches(self):
+        text, fig = tools.filter_holdings(
+            self.h, filters={"account_type": "Discretionary"})
+        self.assertIn("AAA", text)
+        self.assertIn("CCC", text)
+        self.assertNotIn("BBB", text)

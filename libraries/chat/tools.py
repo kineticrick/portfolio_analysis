@@ -74,12 +74,52 @@ def get_asset_detail(handler, symbol, interval="Lifetime"):
     return "\n".join(lines), None
 
 
+_DIMENSION_ATTRS = {
+    "Sector": ("sectors_summary_df", "sectors_history_df"),
+    "AssetType": ("asset_types_summary_df", "asset_types_history_df"),
+    "AccountType": ("account_types_summary_df", "account_types_history_df"),
+    "Geography": ("geography_summary_df", "geography_history_df"),
+}
+
+
+def get_dimension_breakdown(handler, dimension, interval="Lifetime"):
+    summary_attr, history_attr = _DIMENSION_ATTRS[dimension]
+    if interval == "Lifetime":
+        df = getattr(handler, summary_attr)
+        out = df[[dimension, "Current Value", "VW Return"]].copy()
+        return out.to_string(index=False), None
+    # Window: value-weighted return = TotalValue(end) / TotalValue(start) - 1.
+    days = {k: v for (k, v) in handler.performance_milestones}[interval]
+    import pandas as pd
+    start = (pd.to_datetime("today") - pd.DateOffset(days=days)).normalize()
+    hist = getattr(handler, history_attr)
+    window = hist[hist["Date"] >= start].sort_values("Date")
+    grp = window.groupby(dimension)["TotalValue"]
+    vw = ((grp.last() / grp.first() - 1) * 100).round(2)
+    out = vw.reset_index().rename(columns={"TotalValue": "VW Return"})
+    return out.to_string(index=False), None
+
+
+def filter_holdings(handler, filters, columns=None):
+    keep = _filter_symbols(handler, filters)
+    df = handler.current_portfolio_summary_df
+    df = df[df["Symbol"].isin(keep)]
+    if columns:
+        columns = [c for c in columns if c in df.columns]
+        df = df[columns]
+    else:
+        df = df[["Symbol", "Name", "AccountType", "Current Value"]]
+    return df.to_string(index=False), None
+
+
 # ---- dispatcher ---------------------------------------------------------------
 
 _TOOLS = {
     "rank_assets": rank_assets,
     "get_portfolio_summary": get_portfolio_summary,
     "get_asset_detail": get_asset_detail,
+    "get_dimension_breakdown": get_dimension_breakdown,
+    "filter_holdings": filter_holdings,
 }
 
 
