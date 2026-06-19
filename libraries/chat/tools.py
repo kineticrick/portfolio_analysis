@@ -114,6 +114,62 @@ def filter_holdings(handler, filters, columns=None):
     return df.to_string(index=False), None
 
 
+def show_ranked_bar(handler, interval, count=5, metric="price", ascending=False,
+                    filters=None):
+    ranked = handler.get_ranked_assets(interval, price_or_value=metric,
+                                       ascending=ascending)
+    if filters:
+        keep = _filter_symbols(handler, filters)
+        ranked = ranked[ranked["Symbol"].isin(keep)]
+    ranked = ranked.head(count)
+    return_col = "Price % Return" if metric == "price" else "Value % Return"
+    fig = chart_builders.build_ranked_bar(
+        ranked, label_col="Symbol", value_col=return_col,
+        title=f"{interval} ranked assets")
+    summary = ranked[["Symbol", return_col]].to_string(index=False)
+    return summary, fig
+
+
+def show_history_line(handler, target_type, targets, interval="Lifetime"):
+    if interval == "Lifetime":
+        start = pd.Timestamp.min
+    else:
+        days = {k: v for (k, v) in handler.performance_milestones}[interval]
+        start = (pd.to_datetime("today") - pd.DateOffset(days=days)).normalize()
+
+    if target_type == "portfolio":
+        df = handler.portfolio_history_df.reset_index()
+        df = df.rename(columns={df.columns[0]: "Date"})
+        df["Date"] = pd.to_datetime(df["Date"])
+        df["Label"] = "Portfolio"
+        df = df[df["Date"] >= start]
+        fig = chart_builders.build_history_line(
+            df, label_col="Label", value_col="Value", title="Portfolio history")
+        return f"Portfolio history over {interval}.", fig
+
+    if target_type == "asset":
+        df = handler.portfolio_assets_history_expanded_df.copy()
+        df["Date"] = pd.to_datetime(df["Date"])
+        df = df[df["Symbol"].isin(targets)]
+        df = df[df["Date"] >= start]
+        fig = chart_builders.build_history_line(
+            df, label_col="Symbol", value_col="ClosingPrice",
+            title=f"{', '.join(targets)} over {interval}")
+        return f"Price history for {', '.join(targets)} over {interval}.", fig
+
+    if target_type == "dimension":
+        summary_attr, history_attr = _DIMENSION_ATTRS[targets[0]]
+        df = getattr(handler, history_attr).copy()
+        df["Date"] = pd.to_datetime(df["Date"])
+        df = df[df["Date"] >= start]
+        fig = chart_builders.build_history_line(
+            df, label_col=targets[0], value_col="TotalValue",
+            title=f"{targets[0]} over {interval}")
+        return f"{targets[0]} history over {interval}.", fig
+
+    return f"Unknown target_type: {target_type}", None
+
+
 # ---- dispatcher ---------------------------------------------------------------
 
 _TOOLS = {
@@ -122,6 +178,8 @@ _TOOLS = {
     "get_asset_detail": get_asset_detail,
     "get_dimension_breakdown": get_dimension_breakdown,
     "filter_holdings": filter_holdings,
+    "show_ranked_bar": show_ranked_bar,
+    "show_history_line": show_history_line,
 }
 
 
@@ -134,3 +192,119 @@ def dispatch(handler, name, arguments):
         return fn(handler, **arguments)
     except Exception as exc:  # surfaced back to the model as a tool result
         return f"Error running {name}: {exc}", None
+
+
+TOOL_SCHEMAS = [
+    {
+        "name": "rank_assets",
+        "description": "Rank currently-held assets by return over an interval. "
+                       "Returns the top/bottom N as text.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "interval": {"type": "string", "enum": INTERVALS},
+                "count": {"type": "integer", "default": 5},
+                "metric": {"type": "string", "enum": ["price", "value"],
+                           "default": "price"},
+                "ascending": {"type": "boolean", "default": False},
+                "filters": {
+                    "type": "object",
+                    "description": "Optional dimension filters, e.g. "
+                                   "{\"account_type\": \"Retirement\"}.",
+                    "properties": {
+                        "sector": {"type": "string"},
+                        "asset_type": {"type": "string"},
+                        "account_type": {"type": "string"},
+                        "geography": {"type": "string"},
+                    },
+                },
+            },
+            "required": ["interval"],
+        },
+    },
+    {
+        "name": "get_portfolio_summary",
+        "description": "Total portfolio value and return at an interval.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"interval": {"type": "string", "enum": INTERVALS}},
+            "required": [],
+        },
+    },
+    {
+        "name": "get_asset_detail",
+        "description": "Details for one ticker: price, value, return, accounts.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "symbol": {"type": "string"},
+                "interval": {"type": "string", "enum": INTERVALS},
+            },
+            "required": ["symbol"],
+        },
+    },
+    {
+        "name": "get_dimension_breakdown",
+        "description": "Value-weighted return and value by a dimension over an "
+                       "interval.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "dimension": {"type": "string", "enum": DIMENSIONS},
+                "interval": {"type": "string", "enum": INTERVALS},
+            },
+            "required": ["dimension"],
+        },
+    },
+    {
+        "name": "filter_holdings",
+        "description": "List holdings matching dimension filters.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "filters": {
+                    "type": "object",
+                    "properties": {
+                        "sector": {"type": "string"},
+                        "asset_type": {"type": "string"},
+                        "account_type": {"type": "string"},
+                        "geography": {"type": "string"},
+                    },
+                },
+                "columns": {"type": "array", "items": {"type": "string"}},
+            },
+            "required": ["filters"],
+        },
+    },
+    {
+        "name": "show_ranked_bar",
+        "description": "Render a BAR CHART of top/bottom N assets by return.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "interval": {"type": "string", "enum": INTERVALS},
+                "count": {"type": "integer", "default": 5},
+                "metric": {"type": "string", "enum": ["price", "value"]},
+                "ascending": {"type": "boolean", "default": False},
+                "filters": {"type": "object"},
+            },
+            "required": ["interval"],
+        },
+    },
+    {
+        "name": "show_history_line",
+        "description": "Render a rebased % LINE CHART. target_type is 'portfolio', "
+                       "'asset' (targets=list of tickers), or 'dimension' "
+                       "(targets=[dimension name]).",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "target_type": {"type": "string",
+                                "enum": ["portfolio", "asset", "dimension"]},
+                "targets": {"type": "array", "items": {"type": "string"}},
+                "interval": {"type": "string", "enum": INTERVALS},
+            },
+            "required": ["target_type", "targets"],
+        },
+    },
+]

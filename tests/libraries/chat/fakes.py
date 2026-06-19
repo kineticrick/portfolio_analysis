@@ -91,8 +91,8 @@ def make_fake_handler():
         )
 
         portfolio_assets_history_expanded_df = pd.DataFrame({
-            "Date": pd.to_datetime(["2026-01-01", "2026-06-19",
-                                    "2026-01-01", "2026-06-19"]),
+            "Date": [datetime.date(2026, 1, 1), datetime.date(2026, 6, 19),
+                     datetime.date(2026, 1, 1), datetime.date(2026, 6, 19)],
             "Symbol": ["AAA", "AAA", "BBB", "BBB"],
             "ClosingPrice": [8.0, 10.0, 25.0, 20.0],
             "Value": [800.0, 1000.0, 2500.0, 2000.0],

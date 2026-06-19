@@ -1,5 +1,7 @@
 import unittest
 
+import plotly.graph_objs as go
+
 from libraries.chat import tools
 from tests.libraries.chat.fakes import make_fake_handler
 
@@ -94,3 +96,33 @@ class TestDataTools(unittest.TestCase):
         self.assertIn("AAA", text)
         self.assertIn("CCC", text)
         self.assertNotIn("BBB", text)
+
+
+class TestChartTools(unittest.TestCase):
+    def setUp(self):
+        self.h = make_fake_handler()
+
+    def test_show_ranked_bar_returns_figure(self):
+        text, fig = tools.show_ranked_bar(self.h, interval="6m", count=3)
+        self.assertIsInstance(fig, go.Figure)
+        self.assertIn("AAA", text)
+
+    def test_show_history_line_portfolio(self):
+        text, fig = tools.show_history_line(
+            self.h, target_type="portfolio", targets=[], interval="Lifetime")
+        self.assertIsInstance(fig, go.Figure)
+        self.assertGreaterEqual(len(fig.data), 1)
+
+    def test_show_history_line_assets(self):
+        text, fig = tools.show_history_line(
+            self.h, target_type="asset", targets=["AAA", "BBB"],
+            interval="Lifetime")
+        self.assertIsInstance(fig, go.Figure)
+        self.assertEqual(len(fig.data), 2)
+
+    def test_tool_schemas_cover_all_tools(self):
+        names = {s["name"] for s in tools.TOOL_SCHEMAS}
+        self.assertEqual(names, set(tools._TOOLS.keys()))
+        for schema in tools.TOOL_SCHEMAS:
+            self.assertIn("description", schema)
+            self.assertIn("input_schema", schema)
