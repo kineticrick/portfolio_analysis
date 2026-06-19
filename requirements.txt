@@ -1,3 +1,4 @@
+anthropic>=0.40.0
 appdirs>=1.4.4
 autopep8>=1.5.4
 bcrypt>=3.1.7
