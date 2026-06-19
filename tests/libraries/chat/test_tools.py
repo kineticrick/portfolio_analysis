@@ -32,6 +32,36 @@ class TestDataTools(unittest.TestCase):
         text, fig = tools.get_asset_detail(self.h, symbol="AAA", interval="6m")
         self.assertIn("AAA", text)
         self.assertIn("Discretionary", text)
+        self.assertIn("6m price return", text)
+
+    def test_rank_assets_value_metric_uses_value_column_header(self):
+        text, fig = tools.rank_assets(self.h, interval="6m", count=3,
+                                      metric="value")
+        self.assertIn("Value % Return", text)
+        self.assertNotIn("Price % Return", text)
+
+    def test_get_asset_detail_multi_account_lifetime_return(self):
+        import pandas as pd
+        h = make_fake_handler()
+        # Same ticker held in two account types with different cost bases.
+        h.current_portfolio_summary_df = pd.DataFrame({
+            "Symbol": ["DUP", "DUP"],
+            "Name": ["Dup Co", "Dup Co"],
+            "Sector": ["Tech", "Tech"],
+            "AssetType": ["Common Stock", "Common Stock"],
+            "AccountType": ["Discretionary", "Retirement"],
+            "Geography": ["US", "US"],
+            "Current Price": [10.0, 10.0],
+            "Current Value": [1000.0, 1000.0],
+            "Cost Basis": [500.0, 1500.0],
+            "Lifetime Return": [100.0, -33.33],
+            "Dividend Yield": [0.0, 0.0],
+            "Total Dividend": [0.0, 0.0],
+        })
+        text, fig = tools.get_asset_detail(h, symbol="DUP", interval="Lifetime")
+        # Total value 2000 vs total cost 2000 => 0.00%, NOT the first row's 100%.
+        self.assertIn("Lifetime return 0.00%", text)
+        self.assertNotIn("100.00%", text)
 
     def test_dispatch_unknown_tool_returns_error_string(self):
         text, fig = tools.dispatch(self.h, "nope", {})

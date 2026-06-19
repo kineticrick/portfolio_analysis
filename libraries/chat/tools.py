@@ -34,7 +34,8 @@ def rank_assets(handler, interval, count=5, metric="price", ascending=False,
         keep = _filter_symbols(handler, filters)
         ranked = ranked[ranked["Symbol"].isin(keep)]
     ranked = ranked.head(count)
-    cols = ["Symbol", "Interval", "Current Price", "Price % Return"]
+    return_col = "Price % Return" if metric == "price" else "Value % Return"
+    cols = ["Symbol", "Interval", "Current Price", return_col]
     cols = [c for c in cols if c in ranked.columns]
     return ranked[cols].to_string(index=False), None
 
@@ -59,9 +60,11 @@ def get_asset_detail(handler, symbol, interval="Lifetime"):
     accounts = ", ".join(sorted(rows["AccountType"].unique()))
     price = rows["Current Price"].iloc[0]
     value = rows["Current Value"].sum()
+    cost = rows["Cost Basis"].sum()
+    lifetime_return = (value - cost) / cost * 100
     lines = [f"{symbol} ({rows['Name'].iloc[0]}) — held in {accounts}.",
              f"Current price ${price:,.2f}, total value ${value:,.2f}.",
-             f"Lifetime return {rows['Lifetime Return'].iloc[0]:.2f}%."]
+             f"Lifetime return {lifetime_return:.2f}%."]
     if interval != "Lifetime":
         ms = handler.get_asset_milestones(symbols=[symbol])
         m = ms[ms["Interval"] == interval]
