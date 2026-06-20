@@ -1,6 +1,7 @@
 import os
 
-from dash import callback, dcc, html, Input, Output, State, no_update
+from dash import (callback, clientside_callback, dcc, html, Input, Output,
+                  State, no_update)
 import dash_mantine_components as dmc
 import plotly.graph_objs as go
 
@@ -39,10 +40,30 @@ def _render_thread(thread):
     return dmc.Stack(bubbles, gap="sm")
 
 
+# Instant (browser-side) feedback: show a "Thinking…" line the moment Send is
+# clicked, before the slow server round-trip. The server callback clears it when
+# the answer arrives.
+clientside_callback(
+    """
+    function(n_clicks, value) {
+        if (!value || !value.trim()) {
+            return window.dash_clientside.no_update;
+        }
+        return "Thinking\\u2026";
+    }
+    """,
+    Output("chat-thinking", "children", allow_duplicate=True),
+    Input("chat-send", "n_clicks"),
+    State("chat-input", "value"),
+    prevent_initial_call=True,
+)
+
+
 @callback(
     Output(THREAD_STORE_ID, "data"),
     Output(HISTORY_STORE_ID, "data"),
     Output("chat-input", "value"),
+    Output("chat-thinking", "children"),
     Input("chat-send", "n_clicks"),
     State("chat-input", "value"),
     State(HISTORY_STORE_ID, "data"),
@@ -52,7 +73,7 @@ def _render_thread(thread):
 )
 def on_send(n_clicks, user_text, history, thread, view_context):
     if not user_text or not user_text.strip():
-        return no_update, no_update, no_update
+        return no_update, no_update, no_update, no_update
     history = history or []
     thread = thread or []
 
@@ -73,7 +94,8 @@ def on_send(n_clicks, user_text, history, thread, view_context):
                        {"role": "assistant", "text": answer, "figures": figures}]
     history = history + [{"role": "user", "text": user_text},
                          {"role": "assistant", "text": answer}]
-    return thread, history, ""
+    # Clear the "Thinking…" line now that the answer is in the thread.
+    return thread, history, "", ""
 
 
 @callback(
@@ -92,7 +114,12 @@ _chat_body = dmc.Container(
         dcc.Store(id=VIEW_CONTEXT_STORE_ID, data={}),
         dmc.Title("Ask your portfolio", order=2, mb="md"),
         html.Div(id="chat-thread", style={"minHeight": "400px",
-                                          "marginBottom": "1rem"}),
+                                          "marginBottom": "0.25rem"}),
+        # Instant "Thinking…" line shown while a query is in flight (set
+        # client-side, cleared by on_send when the answer arrives).
+        html.Div(id="chat-thinking",
+                 style={"fontStyle": "italic", "color": "gray",
+                        "minHeight": "1.25rem", "marginBottom": "0.75rem"}),
         dmc.Group([
             dcc.Input(id="chat-input", type="text",
                       placeholder="e.g. Top 5 assets in my discretionary account "
