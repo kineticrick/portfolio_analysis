@@ -106,7 +106,10 @@ def render(thread):
     return _render_thread(thread or [])
 
 
-_chat_body = dmc.Container(
+# The chat tab is intentionally NOT wrapped in a dcc.Loading — the data tabs each
+# have their own spinner (portfolio_dashboard.py), while chat shows only the
+# lightweight inline "Thinking…" line during the LLM call.
+chat_tab = dmc.Container(
     [
         dcc.Store(id=HISTORY_STORE_ID, data=[]),
         dcc.Store(id=THREAD_STORE_ID, data=[]),
@@ -130,11 +133,3 @@ _chat_body = dmc.Container(
     ],
     fluid=True,
 )
-
-# The whole app layout is wrapped in a single global dcc.Loading. A component's
-# loading state is owned by its CLOSEST Loading ancestor, so this nested Loading
-# captures the chat callbacks (the multi-second LLM call) instead of the global
-# one. With display="hide" it renders no spinner, so submitting a query leaves
-# the screen as-is — no full-page loading overlay — while the data tabs keep
-# their global spinner.
-chat_tab = dcc.Loading(_chat_body, display="hide")
