@@ -3,3 +3,4 @@ files
 cache/
 libraries/db/pwd.py
 .vscode/
+.env

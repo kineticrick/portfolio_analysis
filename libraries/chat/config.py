@@ -1,5 +1,14 @@
 """Static configuration for the chat layer."""
 
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# Load a local .env file (repo root) so secrets like ANTHROPIC_API_KEY can live
+# in a file instead of being exported in every shell. This does NOT override
+# variables already set in the real environment, and is a no-op if no .env exists.
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+
 # Default model. Swap to "claude-haiku-4-5-20251001" for a cheaper fallback.
 MODEL = "claude-sonnet-4-6"
 

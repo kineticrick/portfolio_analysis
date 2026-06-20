@@ -94,12 +94,26 @@ Open [http://localhost:8050](http://localhost:8050). An orange banner confirms d
 
 ### Enabling Chat
 
-The **Chat** tab calls the [Claude API](https://www.anthropic.com/api), so it needs an API key in the environment:
+The **Chat** tab calls the [Claude API](https://www.anthropic.com/api), so it needs an API key. Provide it either way:
+
+**Option A — a `.env` file (recommended):** copy the template and fill in your key.
+
+```bash
+cp .env.example .env
+# edit .env and set ANTHROPIC_API_KEY=sk-ant-...
+python visualization/dash/portfolio_dashboard/portfolio_dashboard.py        # or --demo
+```
+
+The `.env` file is loaded automatically (via `python-dotenv`) and is gitignored, so the key is never committed.
+
+**Option B — an environment variable:** export it in the shell before launching.
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
 python visualization/dash/portfolio_dashboard/portfolio_dashboard.py        # or --demo
 ```
+
+A key exported in the shell takes precedence over the `.env` file.
 
 - The default model is `claude-sonnet-4-6`. To use the cheaper `claude-haiku-4-5-20251001`, edit `MODEL` in `libraries/chat/config.py`.
 - Your portfolio data (tickers, values, returns) is sent to the Claude API per query to answer questions. On standard API terms it is not used for training.
