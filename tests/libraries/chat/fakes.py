@@ -58,7 +58,7 @@ def make_fake_handler():
                 "Date": pd.to_datetime(["2026-06-12", "2026-06-19"]),
                 "Interval": ["6m", "Lifetime"],
                 "Value": [3000.0, 3500.0],
-                "Percent Return": [16.67, 12.9],
+                "Value % Return": [16.67, 12.9],
             })
 
         def get_asset_milestones(self, symbols=None):

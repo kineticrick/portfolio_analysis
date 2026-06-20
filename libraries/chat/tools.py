@@ -49,7 +49,7 @@ def get_portfolio_summary(handler, interval="Lifetime"):
         return f"No portfolio data for interval {interval}.", None
     r = row.iloc[0]
     text = (f"Portfolio at {interval}: value ${r['Value']:,.2f}, "
-            f"return {r['Percent Return']:.2f}%. "
+            f"return {r['Value % Return']:.2f}%. "
             f"Current total value ${handler.current_portfolio_value:,.2f}.")
     return text, None
 
