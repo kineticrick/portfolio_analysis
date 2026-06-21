@@ -30,6 +30,27 @@ class TestDataTools(unittest.TestCase):
         self.assertIsNone(fig)
         self.assertIn("3000", text.replace(",", ""))
 
+    def test_get_portfolio_summary_valid_interval_missing_boundary(self):
+        # "1y" is a valid interval but the fake milestones only have 6m/Lifetime,
+        # mimicking a boundary date that fell on a non-trading day.
+        text, fig = tools.get_portfolio_summary(self.h, interval="1y")
+        self.assertIsNone(fig)
+        self.assertIn("boundary", text.lower())
+        self.assertNotIn("not a valid interval", text.lower())
+
+    def test_get_portfolio_summary_invalid_interval(self):
+        text, fig = tools.get_portfolio_summary(self.h, interval="banana")
+        self.assertIsNone(fig)
+        self.assertIn("not a valid interval", text.lower())
+
+    def test_filter_unknown_key_gives_descriptive_error(self):
+        # Via dispatch so the ValueError becomes a model-readable string.
+        text, fig = tools.dispatch(self.h, "filter_holdings",
+                                   {"filters": {"bogus": "x"}})
+        self.assertIsNone(fig)
+        self.assertIn("Unknown filter", text)
+        self.assertIn("account_type", text)  # lists the valid filter keys
+
     def test_get_asset_detail(self):
         text, fig = tools.get_asset_detail(self.h, symbol="AAA", interval="6m")
         self.assertIn("AAA", text)

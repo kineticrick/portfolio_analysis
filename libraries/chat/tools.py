@@ -23,7 +23,11 @@ def _filter_symbols(handler, filters):
     """Return the set of symbols whose holdings match ALL given filters."""
     df = handler.current_portfolio_summary_df
     for key, value in filters.items():
-        col = _FILTER_COLS[key]
+        col = _FILTER_COLS.get(key)
+        if col is None:
+            raise ValueError(
+                f"Unknown filter '{key}'. Valid filters: "
+                f"{', '.join(_FILTER_COLS)}.")
         df = df[df[col] == value]
     return set(df["Symbol"])
 
@@ -46,7 +50,13 @@ def get_portfolio_summary(handler, interval="Lifetime"):
     ms = handler.get_portfolio_milestones()
     row = ms[ms["Interval"] == interval]
     if row.empty:
-        return f"No portfolio data for interval {interval}.", None
+        if interval in INTERVALS:
+            # Valid interval, but no value sits exactly on its boundary date.
+            return (f"No portfolio value falls on the {interval} boundary date "
+                    f"(it may be a non-trading day or before the portfolio's "
+                    f"start). Try a nearby interval."), None
+        return (f"'{interval}' is not a valid interval. Valid intervals: "
+                f"{', '.join(INTERVALS)}."), None
     r = row.iloc[0]
     text = (f"Portfolio at {interval}: value ${r['Value']:,.2f}, "
             f"return {r['Value % Return']:.2f}%. "
