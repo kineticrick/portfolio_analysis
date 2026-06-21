@@ -36,6 +36,7 @@ from visualization.dash.portfolio_dashboard.tabs import (
                                                          asset_types_tab,
                                                          account_types_tab,
                                                          geography_tab)
+from visualization.dash.portfolio_dashboard.tabs.chat_tab import chat_tab
 
 
 print("Loading Portfolio Tabs...")
@@ -52,14 +53,19 @@ _tabs = dmc.Tabs(
             dmc.TabsTab('Geography', value='geography-dash-tab'),
             dmc.TabsTab('Assets', value='assets-dash-tab'),
             dmc.TabsTab('Hypotheticals', value='hypotheticals-dash-tab'),
+            dmc.TabsTab('Chat', value='chat-dash-tab'),
         ]),
-        dmc.TabsPanel(portfolio_tab, value='portfolio-dash-tab'),
-        dmc.TabsPanel(sectors_tab, value='sectors-dash-tab'),
-        dmc.TabsPanel(asset_types_tab, value='asset-types-dash-tab'),
-        dmc.TabsPanel(account_types_tab, value='account-types-dash-tab'),
-        dmc.TabsPanel(geography_tab, value='geography-dash-tab'),
-        dmc.TabsPanel(assets_tab, value='assets-dash-tab'),
-        dmc.TabsPanel(hypotheticals_tab, value='hypotheticals-dash-tab'),
+        # Each data tab gets its own loading spinner. The Chat tab is left
+        # WITHOUT one — instead of a full-page spinner during the multi-second
+        # LLM call, it shows a lightweight inline "Thinking…" line.
+        dmc.TabsPanel(dcc.Loading(portfolio_tab), value='portfolio-dash-tab'),
+        dmc.TabsPanel(dcc.Loading(sectors_tab), value='sectors-dash-tab'),
+        dmc.TabsPanel(dcc.Loading(asset_types_tab), value='asset-types-dash-tab'),
+        dmc.TabsPanel(dcc.Loading(account_types_tab), value='account-types-dash-tab'),
+        dmc.TabsPanel(dcc.Loading(geography_tab), value='geography-dash-tab'),
+        dmc.TabsPanel(dcc.Loading(assets_tab), value='assets-dash-tab'),
+        dmc.TabsPanel(dcc.Loading(hypotheticals_tab), value='hypotheticals-dash-tab'),
+        dmc.TabsPanel(chat_tab, value='chat-dash-tab'),
     ],
 )
 
@@ -74,7 +80,7 @@ if os.environ.get('PORTFOLIO_DEMO_MODE') == '1':
 else:
     _content = _tabs
 
-app.layout = dmc.MantineProvider(dcc.Loading(_content))
+app.layout = dmc.MantineProvider(_content)
 
 print(f'Portfolio Dashboard loaded in {time.perf_counter() - enter} seconds')
 

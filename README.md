@@ -1,12 +1,12 @@
 # Portfolio Analysis Dashboard
 
-A personal investment tracking and analysis platform built with Python, Dash, and MySQL. Imports transaction history from multiple brokerages, computes historical performance across multiple dimensions, and presents everything in an interactive 7-tab web dashboard.
+A personal investment tracking and analysis platform built with Python, Dash, and MySQL. Imports transaction history from multiple brokerages, computes historical performance across multiple dimensions, and presents everything in an interactive 8-tab web dashboard — including a natural-language chat assistant that answers questions about your portfolio and draws charts on the fly.
 
 ---
 
 ## Features
 
-### 7-Tab Dashboard
+### 8-Tab Dashboard
 
 | Tab | Description |
 |-----|-------------|
@@ -17,6 +17,7 @@ A personal investment tracking and analysis platform built with Python, Dash, an
 | **Geography** | Historical return aggregated by geography (US, ex-US, Global) |
 | **Assets** | Per-asset table with multi-filter dropdowns and an interactive price history chart |
 | **Hypotheticals** | "What if I'd held?" — price projection for every sold position from exit date to today |
+| **Chat** | Ask questions about your portfolio in plain English and get answers + on-the-fly charts |
 
 ### Portfolio Tab
 - Interactive line chart of total portfolio value with a range slider
@@ -40,6 +41,15 @@ A personal investment tracking and analysis platform built with Python, Dash, an
 - Aggregated summary table: cost basis, current value, % of portfolio, lifetime return, average daily return
 - Checkbox selection to overlay specific dimension values on the history chart
 - Interval dropdown to zoom the chart to a recent window
+
+### Chat — Ask Your Portfolio
+A natural-language assistant embedded as its own tab. Ask things like *"What are the top 5 performing assets in my discretionary account over the last 6 months?"* or *"Show me my portfolio history over 1y"* and get a written answer plus, where useful, a chart rendered inline in the conversation.
+
+- **Tool-calling over the existing analytics**, not text-to-SQL: every number the assistant reports is computed by the same `DashboardHandler` methods and return math (`libraries/returns.py`) that drive the rest of the dashboard, so chat answers always match the charts.
+- **Dynamic charts**: ranking and history questions render real plotly figures in the chat thread.
+- **Read-only and safe**: the assistant can only call a fixed set of whitelisted data/chart tools — it never writes to the database or runs arbitrary queries.
+- **Powered by the Claude API** (`claude-sonnet-4-6` by default), behind a thin provider interface so a local model can be swapped in later.
+- Works in demo mode too (answers over synthetic data). Requires an `ANTHROPIC_API_KEY` — see [Enabling Chat](#enabling-chat). Without a key, the tab shows a setup message instead of erroring.
 
 ### Demo Mode
 Run the full dashboard with zero database or yfinance calls using synthetic GBM-simulated data. Useful for showcasing the app or developing without production data.
@@ -81,6 +91,33 @@ python visualization/dash/portfolio_dashboard/portfolio_dashboard.py --demo
 ```
 
 Open [http://localhost:8050](http://localhost:8050). An orange banner confirms demo mode is active. All data is synthetic — no real financial information is shown.
+
+### Enabling Chat
+
+The **Chat** tab calls the [Claude API](https://www.anthropic.com/api), so it needs an API key. Provide it either way:
+
+**Option A — a `.env` file (recommended):** copy the template and fill in your key.
+
+```bash
+cp .env.example .env
+# edit .env and set ANTHROPIC_API_KEY=sk-ant-...
+python visualization/dash/portfolio_dashboard/portfolio_dashboard.py        # or --demo
+```
+
+The `.env` file is loaded automatically (via `python-dotenv`) and is gitignored, so the key is never committed.
+
+**Option B — an environment variable:** export it in the shell before launching.
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+python visualization/dash/portfolio_dashboard/portfolio_dashboard.py        # or --demo
+```
+
+A key exported in the shell takes precedence over the `.env` file.
+
+- The default model is `claude-sonnet-4-6`. To use the cheaper `claude-haiku-4-5-20251001`, edit `MODEL` in `libraries/chat/config.py`.
+- Your portfolio data (tickers, values, returns) is sent to the Claude API per query to answer questions. On standard API terms it is not used for training.
+- If `ANTHROPIC_API_KEY` is unset, the rest of the dashboard works normally and the Chat tab simply shows a setup message.
 
 ### Run with Real Data
 
@@ -243,6 +280,12 @@ python -m unittest tests.libraries.test_helpers.TestHelpers.test_gen_hist_quanti
 
 Tests use real database connections and validate core business logic in `libraries/helpers.py` — quantity/cost-basis computation, master log building, and historical value generation.
 
+The chat layer has its own fully offline suite (no database, no network, no API key) under `tests/libraries/chat/`, using a deterministic fake handler and a scripted LLM provider:
+
+```bash
+python -m unittest discover -s tests/libraries/chat -p "test_*.py" -v
+```
+
 ---
 
 ## Project Structure
@@ -258,6 +301,13 @@ portfolio_analysis/
 ├── libraries/
 │   ├── globals.py                     # All configuration constants
 │   ├── helpers.py                     # Core business logic
+│   ├── returns.py                     # Value-weighted / rebased return math
+│   ├── chat/                          # Natural-language chat layer
+│   │   ├── config.py                  # Model, limits, system prompt
+│   │   ├── provider.py                # LLMProvider + AnthropicProvider
+│   │   ├── tools.py                   # Tool schemas + dispatcher
+│   │   ├── chart_builders.py          # Pure plotly figure builders
+│   │   └── engine.py                  # Tool-calling loop
 │   ├── HistoryHandlers/
 │   │   ├── BaseHistoryHandler.py
 │   │   ├── AssetHistoryHandler.py
@@ -289,6 +339,7 @@ portfolio_analysis/
 │           ├── asset_types_tab.py
 │           ├── account_types_tab.py
 │           ├── geography_tab.py
+│           ├── chat_tab.py
 │           └── dimension_tab_factory.py   # Factory for the 4 dimension tabs
 │
 ├── files/
@@ -341,5 +392,6 @@ portfolio_analysis/
 | `mysql-connector-python` | MySQL client |
 | `yfinance` | Historical and current stock prices |
 | `diskcache` | Persistent query caching |
+| `anthropic` | Claude API client (powers the Chat tab) |
 
 See `requirements.txt` for pinned versions.
