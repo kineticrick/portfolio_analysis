@@ -47,12 +47,14 @@ clientside_callback(
     """
     function(n_clicks, value) {
         if (!value || !value.trim()) {
-            return window.dash_clientside.no_update;
+            return [window.dash_clientside.no_update,
+                    window.dash_clientside.no_update];
         }
-        return "Thinking\\u2026";
+        return ["Thinking\\u2026", true];
     }
     """,
     Output("chat-thinking", "children", allow_duplicate=True),
+    Output("chat-send", "disabled", allow_duplicate=True),
     Input("chat-send", "n_clicks"),
     State("chat-input", "value"),
     prevent_initial_call=True,
@@ -64,6 +66,7 @@ clientside_callback(
     Output(HISTORY_STORE_ID, "data"),
     Output("chat-input", "value"),
     Output("chat-thinking", "children"),
+    Output("chat-send", "disabled"),
     Input("chat-send", "n_clicks"),
     State("chat-input", "value"),
     State(HISTORY_STORE_ID, "data"),
@@ -73,7 +76,7 @@ clientside_callback(
 )
 def on_send(n_clicks, user_text, history, thread, view_context):
     if not user_text or not user_text.strip():
-        return no_update, no_update, no_update, no_update
+        return no_update, no_update, no_update, no_update, no_update
     history = history or []
     thread = thread or []
 
@@ -94,8 +97,9 @@ def on_send(n_clicks, user_text, history, thread, view_context):
                        {"role": "assistant", "text": answer, "figures": figures}]
     history = history + [{"role": "user", "text": user_text},
                          {"role": "assistant", "text": answer}]
-    # Clear the "Thinking…" line now that the answer is in the thread.
-    return thread, history, "", ""
+    # Clear the "Thinking…" line and re-enable the Send button now that the
+    # answer is in the thread.
+    return thread, history, "", "", False
 
 
 @callback(
