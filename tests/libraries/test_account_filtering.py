@@ -1,11 +1,13 @@
 import unittest
 import datetime
+from unittest import mock
 
 import pandas as pd
 
 from libraries.helpers import build_master_log
 from libraries.helpers import gen_aggregated_historical_value
 from libraries.helpers import compute_dimension_breakdown
+from visualization.dash.DashboardHandler import DashboardHandler
 
 
 class TestComputeDimensionBreakdown(unittest.TestCase):
@@ -77,3 +79,32 @@ class TestAggregationAccountInvariant(unittest.TestCase):
         diff = (merged["total_value_full"] - merged["total_value_split"]).abs()
         self.assertTrue((diff < 0.01).all(),
                         f"mismatched rows:\n{merged[diff >= 0.01]}")
+
+
+class TestHandlerFilteredSeam(unittest.TestCase):
+    def test_forwards_args_and_returns_aggregated_df(self):
+        sentinel = pd.DataFrame({"Date": [datetime.date(2026, 1, 1)],
+                                 "Sector": ["Tech"], "total_value": [1.0],
+                                 "total_cost_basis": [1.0]})
+        # Build an instance without running the heavy __init__.
+        handler = object.__new__(DashboardHandler)
+        with mock.patch(
+                "visualization.dash.DashboardHandler.gen_aggregated_historical_value",
+                return_value=sentinel) as agg:
+            out = handler.get_filtered_dimension_history(
+                "Sector", account_type="Discretionary",
+                symbols=["AAA"], start_date="2026-01-01")
+        agg.assert_called_once_with("Sector", symbols=["AAA"],
+                                    start_date="2026-01-01",
+                                    account_type="Discretionary")
+        self.assertIs(out, sentinel)
+
+    def test_symbols_none_becomes_empty_list(self):
+        sentinel = pd.DataFrame()
+        handler = object.__new__(DashboardHandler)
+        with mock.patch(
+                "visualization.dash.DashboardHandler.gen_aggregated_historical_value",
+                return_value=sentinel) as agg:
+            handler.get_filtered_dimension_history("Sector")
+        agg.assert_called_once_with("Sector", symbols=[], start_date=None,
+                                    account_type=None)

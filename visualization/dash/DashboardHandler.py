@@ -11,7 +11,8 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 import pandas as pd
 from pandas.tseries.offsets import DateOffset
 from libraries.pandas_helpers import print_full
-from libraries.helpers import (get_portfolio_current_value, add_asset_info)
+from libraries.helpers import (get_portfolio_current_value, add_asset_info,
+                               gen_aggregated_historical_value)
 
 from libraries.HistoryHandlers import AssetHistoryHandler
 from libraries.HistoryHandlers import AssetHypotheticalHistoryHandler
@@ -190,7 +191,18 @@ class DashboardHandler:
     def geography_summary_df(self):
         self._load_dimension('Geography', GeographyHistoryHandler)
         return self._geography_summary_df
-        
+
+    def get_filtered_dimension_history(self, dimension, account_type=None,
+                                       symbols=None, start_date=None):
+        """Aggregated dimension time series, optionally restricted to one
+        account_type and/or a symbol subset. Recomputed on demand (cached in
+        gen_aggregated_historical_value). Returns columns:
+        Date, <dimension>, total_value, total_cost_basis.
+        """
+        return gen_aggregated_historical_value(
+            dimension, symbols=symbols or [], start_date=start_date,
+            account_type=account_type)
+
     def _gen_performance_milestones(self, history_df: pd.DataFrame, current_value: float,
                                     current_price: float=None,  
                                     milestones: list=[]) -> pd.DataFrame: 
