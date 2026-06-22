@@ -381,10 +381,11 @@ def is_bday(date: str) -> bool:
     bday = BDay()
     return bday.is_on_offset(pd.to_datetime(date))
     
-def gen_assets_historical_value(symbols: list=[], 
+def gen_assets_historical_value(symbols: list=[],
                                 cadence: str='daily',
                                 start_date: str=None,
-                                include_exit_date=True) -> pd.DataFrame:
+                                include_exit_date=True,
+                                account_type: str=None) -> pd.DataFrame:
     """ 
     Provide lifetime value of asset within portfolio over time
     Takes quantity of shares, and asset price at that time, to calculate
@@ -405,8 +406,8 @@ def gen_assets_historical_value(symbols: list=[],
     assert(cadence in CADENCE_MAP.keys())
     assert(type(symbols) == list)
     
-    # Get master event log for asset 
-    assets_event_log_df = build_master_log(symbols)
+    # Get master event log for asset
+    assets_event_log_df = build_master_log(symbols, account_type=account_type)
 
     # Get historical share quantities of assets
     quantities_df = gen_hist_quantities_mult(assets_event_log_df, 
@@ -441,12 +442,16 @@ def gen_assets_historical_value(symbols: list=[],
     first_date = sorted_quantities_df.index[0]
     last_date = sorted_quantities_df.index[-1]
 
-    # Only use the symbols found in our transactions data
-    # This should be identical to those passed in, but just in case
-    returned_symbols = list(quantities_df['Symbol'].unique())
-    
+    # Always fetch prices using the full (unfiltered) symbol list so that both
+    # filtered and unfiltered callers share the same price-cache bucket.
+    # Different symbol-list sizes cause the diskcache to miss and re-fetch from
+    # yfinance, yielding 1-cent rounding differences for the same ticker+date.
+    # The inner merge below naturally restricts to symbols present in quantities_df.
+    all_symbols_log = build_master_log(symbols)
+    all_symbols = list(all_symbols_log['Symbol'].unique())
+
     # Get historical prices of assets
-    prices_df = get_historical_prices(tickers=returned_symbols, 
+    prices_df = get_historical_prices(tickers=all_symbols,
                                 start=first_date, end=last_date,
                                 interval=cadence, cleaned_up=True)
 
@@ -496,7 +501,8 @@ _aggregation_cache = {}
 def gen_aggregated_historical_value(dimension: str,
                                     symbols: list=[],
                                     cadence: str='daily',
-                                    start_date: str=None) -> pd.DataFrame:
+                                    start_date: str=None,
+                                    account_type: str=None) -> pd.DataFrame:
     """
     Generate historical value of portfolio, aggregated by a given dimension
     Aggregation is done by taking the average of [cadence] percent return values of
@@ -515,13 +521,14 @@ def gen_aggregated_historical_value(dimension: str,
     assert(cadence in CADENCE_MAP.keys())
 
     # Check cache for the expensive expanded_df (shared across dimension calls)
-    cache_key = (tuple(symbols), cadence, str(start_date))
+    cache_key = (tuple(symbols), cadence, str(start_date), account_type)
     if cache_key not in _aggregation_cache:
         # Get all assets' historical values
         assets_history_df = gen_assets_historical_value(symbols=symbols,
                                                         cadence=cadence,
                                                         start_date=start_date,
-                                                        include_exit_date=False)
+                                                        include_exit_date=False,
+                                                        account_type=account_type)
         # Add in Sector, AssetType, etc columns
         _aggregation_cache[cache_key] = add_asset_info(assets_history_df, truncate=False)
 
