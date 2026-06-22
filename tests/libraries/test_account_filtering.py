@@ -1,9 +1,44 @@
 import unittest
+import datetime
 
 import pandas as pd
 
 from libraries.helpers import build_master_log
 from libraries.helpers import gen_aggregated_historical_value
+from libraries.helpers import compute_dimension_breakdown
+
+
+class TestComputeDimensionBreakdown(unittest.TestCase):
+    def _agg(self):
+        return pd.DataFrame({
+            "Date": [datetime.date(2026, 1, 1), datetime.date(2026, 6, 1),
+                     datetime.date(2026, 1, 1), datetime.date(2026, 6, 1)],
+            "Sector": ["Tech", "Tech", "Health", "Health"],
+            "total_value": [2000.0, 2500.0, 400.0, 500.0],
+            "total_cost_basis": [2000.0, 2000.0, 400.0, 400.0],
+        })
+
+    def test_window_uses_rebased_return(self):
+        out = compute_dimension_breakdown(self._agg(), "Sector", lifetime=False)
+        tech = out[out["Sector"] == "Tech"].iloc[0]
+        # 2500 / 2000 - 1 = 25%
+        self.assertAlmostEqual(tech["VW Return"], 25.0, places=2)
+        self.assertAlmostEqual(tech["Current Value"], 2500.0, places=2)
+        self.assertEqual(list(out.columns), ["Sector", "Current Value", "VW Return"])
+
+    def test_lifetime_uses_cost_based_return(self):
+        out = compute_dimension_breakdown(self._agg(), "Sector", lifetime=True)
+        health = out[out["Sector"] == "Health"].iloc[0]
+        # (500 - 400) / 400 = 25%
+        self.assertAlmostEqual(health["VW Return"], 25.0, places=2)
+        self.assertAlmostEqual(health["Current Value"], 500.0, places=2)
+
+    def test_empty_input_returns_shaped_empty(self):
+        empty = pd.DataFrame(
+            columns=["Date", "Sector", "total_value", "total_cost_basis"])
+        out = compute_dimension_breakdown(empty, "Sector", lifetime=False)
+        self.assertTrue(out.empty)
+        self.assertEqual(list(out.columns), ["Sector", "Current Value", "VW Return"])
 
 
 class TestBuildMasterLogAccountFilter(unittest.TestCase):

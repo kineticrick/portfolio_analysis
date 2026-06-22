@@ -552,6 +552,37 @@ def gen_aggregated_historical_value(dimension: str,
 
     return aggregated_df
 
+def compute_dimension_breakdown(aggregated_df: pd.DataFrame, dimension: str,
+                                lifetime: bool) -> pd.DataFrame:
+    """Collapse an aggregated dimension time series into a per-member summary.
+
+    Input columns: Date, <dimension>, total_value, total_cost_basis.
+    Output columns: <dimension>, 'Current Value', 'VW Return'.
+
+    - lifetime=True:  VW Return = (value - cost) / cost * 100   (cost-based)
+    - lifetime=False: VW Return = (last_value / first_value - 1) * 100 (rebased)
+    Current Value is the latest total_value for the member.
+    """
+    cols = [dimension, "Current Value", "VW Return"]
+    if aggregated_df.empty:
+        return pd.DataFrame(columns=cols)
+
+    rows = []
+    for member, grp in aggregated_df.sort_values("Date").groupby(dimension):
+        last_value = grp["total_value"].iloc[-1]
+        if lifetime:
+            last_cost = grp["total_cost_basis"].iloc[-1]
+            vw_return = (last_value - last_cost) / last_cost * 100 \
+                if last_cost else 0.0
+        else:
+            first_value = grp["total_value"].iloc[0]
+            vw_return = (last_value / first_value - 1) * 100 \
+                if first_value else 0.0
+        rows.append({dimension: member, "Current Value": round(last_value, 2),
+                     "VW Return": round(vw_return, 2)})
+
+    return pd.DataFrame(rows, columns=cols)
+
 def get_portfolio_summary() -> pd.DataFrame:
     """ 
     Retrieve summary table of entire portfolio
