@@ -9,6 +9,7 @@ import pandas as pd
 
 from libraries.chat import chart_builders
 from libraries.chat.config import INTERVALS, DIMENSIONS
+from libraries.helpers import compute_dimension_breakdown
 
 # Maps a filter key the model uses to the summary-df column name.
 _FILTER_COLS = {
@@ -94,21 +95,57 @@ _DIMENSION_ATTRS = {
 }
 
 
-def get_dimension_breakdown(handler, dimension, interval="Lifetime"):
-    summary_attr, history_attr = _DIMENSION_ATTRS[dimension]
-    if interval == "Lifetime":
-        df = getattr(handler, summary_attr)
-        out = df[[dimension, "Current Value", "VW Return"]].copy()
+def _split_account_and_entity_filters(filters):
+    """Separate the transaction-level account_type filter from the entity-level
+    filters (sector/asset_type/geography). Returns (account_type_or_None, dict)."""
+    account_type = filters.get("account_type")
+    entity = {k: v for k, v in filters.items() if k != "account_type"}
+    return account_type, entity
+
+
+def get_dimension_breakdown(handler, dimension, interval="Lifetime", filters=None):
+    if not filters:
+        # Fast path: unfiltered breakdown straight from cached summary/history.
+        summary_attr, history_attr = _DIMENSION_ATTRS[dimension]
+        if interval == "Lifetime":
+            df = getattr(handler, summary_attr)
+            out = df[[dimension, "Current Value", "VW Return"]].copy()
+            return out.to_string(index=False), None
+        days = {k: v for (k, v) in handler.performance_milestones}[interval]
+        start = (pd.to_datetime("today") - pd.DateOffset(days=days)).normalize()
+        hist = getattr(handler, history_attr).copy()
+        hist["Date"] = pd.to_datetime(hist["Date"])
+        window = hist[hist["Date"] >= start].sort_values("Date")
+        grp = window.groupby(dimension)["TotalValue"]
+        vw = ((grp.last() / grp.first() - 1) * 100).round(2)
+        out = vw.reset_index().rename(columns={"TotalValue": "VW Return"})
         return out.to_string(index=False), None
-    # Window: value-weighted return = TotalValue(end) / TotalValue(start) - 1.
-    days = {k: v for (k, v) in handler.performance_milestones}[interval]
-    start = (pd.to_datetime("today") - pd.DateOffset(days=days)).normalize()
-    hist = getattr(handler, history_attr).copy()
-    hist["Date"] = pd.to_datetime(hist["Date"])
-    window = hist[hist["Date"] >= start].sort_values("Date")
-    grp = window.groupby(dimension)["TotalValue"]
-    vw = ((grp.last() / grp.first() - 1) * 100).round(2)
-    out = vw.reset_index().rename(columns={"TotalValue": "VW Return"})
+
+    # Filtered path: recompute from transactions via the handler seam.
+    account_type, entity_filters = _split_account_and_entity_filters(filters)
+    symbols = None
+    if entity_filters:
+        symbols = sorted(_filter_symbols(handler, entity_filters))
+        if not symbols:
+            return "No holdings match those filters.", None
+
+    if interval == "Lifetime":
+        start_date = None
+    elif interval in INTERVALS:
+        days = {k: v for (k, v) in handler.performance_milestones}[interval]
+        start_date = (pd.to_datetime("today")
+                      - pd.DateOffset(days=days)).normalize()
+    else:
+        return (f"'{interval}' is not a valid interval. Valid intervals: "
+                f"{', '.join(INTERVALS)}."), None
+
+    agg = handler.get_filtered_dimension_history(
+        dimension, account_type=account_type, symbols=symbols,
+        start_date=start_date)
+    if agg.empty:
+        return "No holdings match those filters.", None
+    out = compute_dimension_breakdown(agg, dimension,
+                                      lifetime=(interval == "Lifetime"))
     return out.to_string(index=False), None
 
 
@@ -261,12 +298,24 @@ TOOL_SCHEMAS = [
     {
         "name": "get_dimension_breakdown",
         "description": "Value-weighted return and value by a dimension over an "
-                       "interval.",
+                       "interval. Optionally filter by account_type, sector, "
+                       "asset_type, or geography via `filters`.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "dimension": {"type": "string", "enum": DIMENSIONS},
                 "interval": {"type": "string", "enum": INTERVALS},
+                "filters": {
+                    "type": "object",
+                    "description": "Optional filters, e.g. "
+                                   "{\"account_type\": \"Discretionary\"}.",
+                    "properties": {
+                        "sector": {"type": "string"},
+                        "asset_type": {"type": "string"},
+                        "account_type": {"type": "string"},
+                        "geography": {"type": "string"},
+                    },
+                },
             },
             "required": ["dimension"],
         },
