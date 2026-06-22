@@ -46,7 +46,7 @@ _EVENT_QUERIES = {
     'acquisition': (master_log_acquisitions_query, master_log_acquisitions_columns),
 }
 
-def  build_master_log(symbols: list=[]) -> pd.DataFrame:
+def  build_master_log(symbols: list=[], account_type: str=None) -> pd.DataFrame:
     """
     For each ASSET_EVENT, retrieve log of each event as a dataframe, then 
     merge each into a sorted master log
@@ -136,8 +136,17 @@ def  build_master_log(symbols: list=[]) -> pd.DataFrame:
     # ALL accounts)  
     
     master_log_df.loc[
-        master_log_df['Action'].isin(['split', 'acquisition-target', 'acquisition-acquirer']), 
+        master_log_df['Action'].isin(['split', 'acquisition-target', 'acquisition-acquirer']),
         'AccountType'] = 'Agnostic'
+
+    # Account-type filtering is applied at the transaction level (per CLAUDE.md):
+    # keep this account's own events plus 'Agnostic' events (splits/acquisitions
+    # apply to every account). Filtering here — rather than on the per-row
+    # AccountType of the computed value series — avoids dropping split-date rows
+    # that get tagged 'Agnostic' and ffilled forward.
+    if account_type is not None:
+        master_log_df = master_log_df[
+            master_log_df['AccountType'].isin([account_type, 'Agnostic'])]
 
     return master_log_df
 
