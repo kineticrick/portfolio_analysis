@@ -442,14 +442,20 @@ def gen_assets_historical_value(symbols: list=[],
     first_date = sorted_quantities_df.index[0]
     last_date = sorted_quantities_df.index[-1]
 
-    # Fetch prices for the FULL (unfiltered) symbol universe so that filtered
-    # and unfiltered callers share the same price-cache bucket. yfinance's batch
-    # download returns 1-cent-different closes for the same ticker+date depending
-    # on which symbols are batched together; sharing the bucket keeps the
-    # account-filtered breakdown exactly reconcilable with the unfiltered one.
+    # For an account_type-filtered call, fetch prices for the FULL (unfiltered)
+    # symbol universe so the filtered and unfiltered calls share the same
+    # price-cache bucket. yfinance's batch download returns 1-cent-different
+    # closes for the same ticker+date depending on which symbols are batched
+    # together; sharing the bucket is what keeps the account-split breakdown
+    # exactly reconcilable with the unfiltered total (Disc + Ret == full).
     # The inner merge below restricts back to the symbols actually held.
     # When unfiltered, assets_event_log_df is already the full log — reuse it
     # instead of rebuilding (this is the hot path used throughout startup).
+    # Note: this penny-exact reconciliation guarantee is specific to the
+    # account_type split. An entity-filtered call (a non-empty `symbols` subset
+    # with account_type=None) deliberately prices only its subset and is not
+    # expected to reconcile against the unfiltered total — it only needs to be
+    # internally consistent.
     if account_type is None:
         full_symbols_log = assets_event_log_df
     else:
@@ -500,7 +506,7 @@ def gen_assets_historical_value(symbols: list=[],
     return merged_df
 
 # Module-level cache for the expensive expanded_df computation in gen_aggregated_historical_value.
-# Key: (tuple(symbols), cadence, start_date) -> expanded DataFrame with asset info merged.
+# Key: (tuple(symbols), cadence, start_date, account_type) -> expanded DataFrame with asset info merged.
 # This means when 4 dimension handlers call sequentially, only the first does the expensive work.
 _aggregation_cache = {}
 
