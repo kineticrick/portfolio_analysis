@@ -442,13 +442,19 @@ def gen_assets_historical_value(symbols: list=[],
     first_date = sorted_quantities_df.index[0]
     last_date = sorted_quantities_df.index[-1]
 
-    # Always fetch prices using the full (unfiltered) symbol list so that both
-    # filtered and unfiltered callers share the same price-cache bucket.
-    # Different symbol-list sizes cause the diskcache to miss and re-fetch from
-    # yfinance, yielding 1-cent rounding differences for the same ticker+date.
-    # The inner merge below naturally restricts to symbols present in quantities_df.
-    all_symbols_log = build_master_log(symbols)
-    all_symbols = list(all_symbols_log['Symbol'].unique())
+    # Fetch prices for the FULL (unfiltered) symbol universe so that filtered
+    # and unfiltered callers share the same price-cache bucket. yfinance's batch
+    # download returns 1-cent-different closes for the same ticker+date depending
+    # on which symbols are batched together; sharing the bucket keeps the
+    # account-filtered breakdown exactly reconcilable with the unfiltered one.
+    # The inner merge below restricts back to the symbols actually held.
+    # When unfiltered, assets_event_log_df is already the full log — reuse it
+    # instead of rebuilding (this is the hot path used throughout startup).
+    if account_type is None:
+        full_symbols_log = assets_event_log_df
+    else:
+        full_symbols_log = build_master_log(symbols)
+    all_symbols = list(full_symbols_log['Symbol'].unique())
 
     # Get historical prices of assets
     prices_df = get_historical_prices(tickers=all_symbols,
