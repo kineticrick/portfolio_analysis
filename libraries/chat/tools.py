@@ -177,7 +177,8 @@ def show_ranked_bar(handler, interval, count=5, metric="price", ascending=False,
     return summary, fig
 
 
-def show_history_line(handler, target_type, targets, interval="Lifetime"):
+def show_history_line(handler, target_type, targets, interval="Lifetime",
+                      filters=None):
     if interval == "Lifetime":
         start = pd.Timestamp.min
     else:
@@ -210,10 +211,28 @@ def show_history_line(handler, target_type, targets, interval="Lifetime"):
         if targets[0] not in _DIMENSION_ATTRS:
             return (f"Unknown dimension '{targets[0]}'. "
                     f"Valid: {list(_DIMENSION_ATTRS)}."), None
-        summary_attr, history_attr = _DIMENSION_ATTRS[targets[0]]
-        df = getattr(handler, history_attr).copy()
-        df["Date"] = pd.to_datetime(df["Date"])
-        df = df[df["Date"] >= start]
+
+        if filters:
+            account_type, entity_filters = \
+                _split_account_and_entity_filters(filters)
+            symbols = None
+            if entity_filters:
+                symbols = sorted(_filter_symbols(handler, entity_filters))
+                if not symbols:
+                    return "No holdings match those filters.", None
+            start_date = None if interval == "Lifetime" else start
+            agg = handler.get_filtered_dimension_history(
+                targets[0], account_type=account_type, symbols=symbols,
+                start_date=start_date)
+            if agg.empty:
+                return "No holdings match those filters.", None
+            df = agg.rename(columns={"total_value": "TotalValue"})
+        else:
+            summary_attr, history_attr = _DIMENSION_ATTRS[targets[0]]
+            df = getattr(handler, history_attr).copy()
+            df["Date"] = pd.to_datetime(df["Date"])
+            df = df[df["Date"] >= start]
+
         fig = chart_builders.build_history_line(
             df, label_col=targets[0], value_col="TotalValue",
             title=f"{targets[0]} over {interval}")
@@ -359,7 +378,8 @@ TOOL_SCHEMAS = [
         "name": "show_history_line",
         "description": "Render a rebased % LINE CHART. target_type is 'portfolio', "
                        "'asset' (targets=list of tickers), or 'dimension' "
-                       "(targets=[dimension name]).",
+                       "(targets=[dimension name]). For 'dimension' you may pass "
+                       "`filters` (account_type/sector/asset_type/geography).",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -367,6 +387,16 @@ TOOL_SCHEMAS = [
                                 "enum": ["portfolio", "asset", "dimension"]},
                 "targets": {"type": "array", "items": {"type": "string"}},
                 "interval": {"type": "string", "enum": INTERVALS},
+                "filters": {
+                    "type": "object",
+                    "description": "Only for target_type='dimension'.",
+                    "properties": {
+                        "sector": {"type": "string"},
+                        "asset_type": {"type": "string"},
+                        "account_type": {"type": "string"},
+                        "geography": {"type": "string"},
+                    },
+                },
             },
             "required": ["target_type", "targets"],
         },

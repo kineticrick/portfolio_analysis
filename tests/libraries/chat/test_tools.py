@@ -195,6 +195,14 @@ class TestChartTools(unittest.TestCase):
         self.assertIsNone(fig)
         self.assertIn("Unknown dimension", text)
 
+    def test_show_history_line_dimension_with_filter(self):
+        text, fig = tools.show_history_line(
+            self.h, target_type="dimension", targets=["Sector"],
+            interval="6m", filters={"account_type": "Discretionary"})
+        self.assertIsInstance(fig, go.Figure)
+        self.assertEqual(self.h.last_filter_call["account_type"], "Discretionary")
+        self.assertGreaterEqual(len(fig.data), 1)
+
     def test_tool_schemas_cover_all_tools(self):
         names = {s["name"] for s in tools.TOOL_SCHEMAS}
         self.assertEqual(names, set(tools._TOOLS.keys()))
