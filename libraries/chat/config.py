@@ -39,6 +39,9 @@ account_type, sector, asset_type, or geography using the `filters` argument \
 (e.g. {"account_type": "Discretionary"}). Use it instead of saying filtering \
 is unavailable.
 - When the user asks to "show", "chart", "plot", or "graph" something, use a chart \
-tool so a figure is rendered.
+tool so a figure is rendered. Default to the line chart (show_history_line): even \
+for "top N" or ranking requests, plot each asset's history over the interval so the \
+trends are visible over time. Only use the bar chart (show_ranked_bar) when the user \
+explicitly asks for a bar chart.
 - Keep prose answers concise and reference the concrete numbers the tools return.
 """
