@@ -1,6 +1,10 @@
+import datetime
 import unittest
 
+import pandas as pd
+
 from libraries.db import sql
+from libraries.helpers import aggregate_assets_history_by_symbol
 
 
 class TestAssetsHistorySchema(unittest.TestCase):
@@ -26,3 +30,51 @@ class TestAssetsHistorySchema(unittest.TestCase):
         }
         expected = [mapping[c] for c in col_names]
         self.assertEqual(expected, sql.read_assets_history_columns)
+
+
+class TestAggregateBySymbol(unittest.TestCase):
+    def _per_account(self):
+        d = datetime.date(2026, 1, 2)
+        return pd.DataFrame({
+            "Date": [d, d, d],
+            "Symbol": ["DUP", "DUP", "SOLO"],
+            "AccountType": ["Discretionary", "Retirement", "Discretionary"],
+            "Quantity": [10, 5, 3],
+            "CostBasis": [100.0, 60.0, 30.0],
+            "ClosingPrice": [12.0, 12.0, 8.0],
+            "Value": [120.0, 60.0, 24.0],
+            "PercentReturn": [20.0, 0.0, -20.0],
+        })
+
+    def test_multi_account_symbol_collapses_to_one_row(self):
+        out = aggregate_assets_history_by_symbol(self._per_account())
+        dup = out[out["Symbol"] == "DUP"]
+        self.assertEqual(len(dup), 1)
+        row = dup.iloc[0]
+        self.assertEqual(row["Quantity"], 15)          # 10 + 5
+        self.assertAlmostEqual(row["CostBasis"], 160.0)  # 100 + 60
+        self.assertAlmostEqual(row["Value"], 180.0)      # 120 + 60
+        self.assertAlmostEqual(row["ClosingPrice"], 12.0)  # identical, 'first'
+        # return recomputed from summed totals: (180 - 160) / 160 * 100 = 12.5
+        self.assertAlmostEqual(row["PercentReturn"], 12.5)
+        self.assertNotIn("AccountType", out.columns)
+
+    def test_single_account_symbol_unchanged(self):
+        out = aggregate_assets_history_by_symbol(self._per_account())
+        solo = out[out["Symbol"] == "SOLO"].iloc[0]
+        self.assertEqual(solo["Quantity"], 3)
+        self.assertAlmostEqual(solo["Value"], 24.0)
+
+    def test_idempotent_on_per_symbol_frame(self):
+        once = aggregate_assets_history_by_symbol(self._per_account())
+        twice = aggregate_assets_history_by_symbol(once)
+        self.assertEqual(len(once), len(twice))
+
+    def test_zero_cost_basis_guarded(self):
+        d = datetime.date(2026, 1, 2)
+        df = pd.DataFrame({
+            "Date": [d], "Symbol": ["Z"], "AccountType": ["Discretionary"],
+            "Quantity": [1], "CostBasis": [0.0], "ClosingPrice": [5.0],
+            "Value": [5.0], "PercentReturn": [0.0]})
+        out = aggregate_assets_history_by_symbol(df)
+        self.assertEqual(out.iloc[0]["PercentReturn"], 0.0)
