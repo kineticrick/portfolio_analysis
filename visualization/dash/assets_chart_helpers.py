@@ -35,7 +35,11 @@ def prepare_per_account_chart_df(expanded_df, summary_df, selected_pairs,
     # Append today's live point per (Symbol, AccountType) so each line ends at
     # that account's live price/value (history excludes today).
     today = pd.Timestamp('today').normalize()
-    summ = summary_df.set_index(['Symbol', 'AccountType'])
+    # drop_duplicates first: the summary's primary key includes Name, so a rare
+    # duplicate (Symbol, AccountType) would otherwise make .loc return a Series
+    # and float() raise. One row per account is all we need for the live point.
+    summ = summary_df.drop_duplicates(
+        ['Symbol', 'AccountType']).set_index(['Symbol', 'AccountType'])
     today_rows = []
     for (sym, acct), g in df.groupby(['Symbol', 'AccountType']):
         if (sym, acct) in summ.index:
