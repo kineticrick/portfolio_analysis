@@ -27,3 +27,16 @@ class TestBuildByAccountExpanded(unittest.TestCase):
             out = h._build_by_account_expanded(["QQQ"])
         self.assertEqual(set(out["Symbol"]), {"QQQ"})            # ZZZ filtered out
         self.assertEqual(out["AccountType"].nunique(), 2)        # both accounts kept
+
+
+class TestDemoPerAccountExpanded(unittest.TestCase):
+    def test_demo_exposes_per_account_expanded(self):
+        from visualization.dash.DemoDashboardHandler import DemoDashboardHandler
+        h = DemoDashboardHandler()
+        df = h.portfolio_assets_history_by_account_expanded_df
+        self.assertIn("AccountType", df.columns)
+        self.assertTrue(
+            set(df["AccountType"].unique()).issubset(
+                {"Discretionary", "Retirement"}))
+        # one account per (Date, Symbol) in demo (single-account symbols)
+        self.assertEqual(int(df.duplicated(subset=["Date", "Symbol"]).sum()), 0)
