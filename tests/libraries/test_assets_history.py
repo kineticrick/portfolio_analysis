@@ -78,3 +78,28 @@ class TestAggregateBySymbol(unittest.TestCase):
             "Value": [5.0], "PercentReturn": [0.0]})
         out = aggregate_assets_history_by_symbol(df)
         self.assertEqual(out.iloc[0]["PercentReturn"], 0.0)
+
+
+from libraries.HistoryHandlers.AssetHistoryHandler import build_assets_history_rows
+
+
+class TestBuildAssetsHistoryRows(unittest.TestCase):
+    def test_one_tuple_per_row_with_account_type(self):
+        d = datetime.date(2026, 1, 2)
+        df = pd.DataFrame({
+            "Date": [d, d],
+            "Symbol": ["DUP", "DUP"],
+            "AccountType": ["Discretionary", "Retirement"],
+            "Quantity": [10, 5],
+            "CostBasis": [100.0, 60.0],
+            "ClosingPrice": [12.0, 12.0],
+            "Value": [120.0, 60.0],
+            "PercentReturn": [20.0, 0.0],
+        })
+        rows = build_assets_history_rows(df)
+        self.assertEqual(len(rows), 2)            # both accounts preserved
+        self.assertTrue(all(len(t) == 8 for t in rows))
+        self.assertEqual({t[2] for t in rows}, {"Discretionary", "Retirement"})
+        # field order: (Date, Symbol, AccountType, Quantity, CostBasis,
+        #               ClosingPrice, Value, PercentReturn)
+        self.assertEqual(rows[0][1], "DUP")
