@@ -65,6 +65,10 @@ class DashboardHandler:
             self.portfolio_assets_history_df.copy())
         print("✓ Expanded asset history precomputed")
 
+        # Per-account expanded history for the per-account Assets chart.
+        self.portfolio_assets_history_by_account_expanded_df = \
+            self._build_by_account_expanded(portfolio_symbols)
+
         # Get and set asset milestones
         self.asset_milestones = self.get_asset_milestones()
 
@@ -461,7 +465,16 @@ class DashboardHandler:
             history_df = add_asset_info(history_df)
         
         return history_df
-    
+
+    def _build_by_account_expanded(self, portfolio_symbols):
+        """Per-account asset history (current holdings) with entity info attached.
+        One row per (Date, Symbol, AccountType); feeds the per-account Assets
+        chart. % change is rebased per line in the chart helper, not here.
+        """
+        by_account = self.assets_history_by_account_df.loc[
+            self.assets_history_by_account_df['Symbol'].isin(portfolio_symbols)]
+        return add_asset_info(by_account.copy())
+
     def gen_historical_stats(self, history_df: pd.DataFrame, 
                              hypotheticals: bool=False) -> pd.DataFrame:
         """ 
