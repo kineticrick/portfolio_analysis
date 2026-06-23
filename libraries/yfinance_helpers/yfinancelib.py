@@ -81,10 +81,10 @@ def _gen_historical_prices(tickers, start, end):
     
     prices = {}
     for symbol, ticker_obj in ticker_objs.items():
-        
-        history_df = ticker_obj.history(start=start, end=end, 
+
+        history_df = ticker_obj.history(start=start, end=end,
                                           actions=False, timeout=60)
-        
+
         history_dict = history_df.to_dict(orient='index')
         prices[symbol] = history_dict
 
@@ -156,11 +156,26 @@ def get_historical_prices(tickers: list, start: str=None,
         data = data.dropna()
 
         prices_df = pd.concat([prices_df, data], ignore_index=False)
-    
+
+    # Every symbol came back empty. This is normal when the requested window
+    # contains no completed trading sessions — e.g. the gap between the last
+    # stored history date and today spans only weekends and/or market holidays.
+    # (BaseHistoryHandler uses pandas BDay, which is holiday-unaware, so it can
+    # ask for a window like Fri-Juneteenth -> Mon that has no trading days.)
+    # The raw empty frame here would carry only a 'Date' column and later crash
+    # gen_assets_historical_value with a cryptic "KeyError: 'Symbol'" on the
+    # merge. Return a correctly-shaped empty frame instead so the caller's merge
+    # is a clean no-op (no new history is added until real data exists).
+    if prices_df.empty:
+        print(f"WARNING: YFinance returned no historical prices for {tickers} "
+              f"between {start} and {end} (likely no trading days in range). "
+              f"No new history added.")
+        return pd.DataFrame(columns=['Date', 'Symbol', 'ClosingPrice'])
+
     prices_df = prices_df.round(2)
     prices_df = prices_df.reset_index()
-    prices_df = prices_df.rename(columns={'index': 'Date'}) 
-    
+    prices_df = prices_df.rename(columns={'index': 'Date'})
+
     return prices_df
 
 @cache.memoize(expire=60*15)
