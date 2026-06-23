@@ -356,9 +356,14 @@ def gen_hist_quantities_mult(assets_event_log_df: pd.DataFrame,
             (assets_event_log_df['Symbol'] == symbol) & 
             ((assets_event_log_df['AccountType'] == account_type) | 
              (assets_event_log_df['AccountType'] == 'Agnostic'))]
-        symbol_quantities_df = gen_hist_quantities(symbol_event_log_df, 
+        symbol_quantities_df = gen_hist_quantities(symbol_event_log_df,
                                                    cadence=cadence,
                                                    expand_chronology=expand_chronology)
+        # The per-event AccountType ffills 'Agnostic' (splits/acquisitions) across a
+        # series; overwrite with this series' true account so every row is cleanly
+        # labeled. Required for the (date, symbol, account_type) primary key, and it
+        # also removes the spurious 'Agnostic' bucket from the AccountType dimension.
+        symbol_quantities_df['AccountType'] = account_type
         quantities_df = pd.concat([quantities_df, symbol_quantities_df])
 
     return quantities_df
