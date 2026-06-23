@@ -12,7 +12,8 @@ import pandas as pd
 from pandas.tseries.offsets import DateOffset
 from libraries.pandas_helpers import print_full
 from libraries.helpers import (get_portfolio_current_value, add_asset_info,
-                               gen_aggregated_historical_value)
+                               gen_aggregated_historical_value,
+                               aggregate_assets_history_by_symbol)
 
 from libraries.HistoryHandlers import AssetHistoryHandler
 from libraries.HistoryHandlers import AssetHypotheticalHistoryHandler
@@ -48,8 +49,11 @@ class DashboardHandler:
         self.current_portfolio_summary_df = portfolio_summary_df
         self.current_portfolio_value = portfolio_value
         
-        # Get and set assets history
-        self.assets_history_df = ah.history_df
+        # Get and set assets history. The stored table is per-account; expose
+        # the faithful per-account frame (for future per-account asset views)
+        # AND a per-symbol-aggregated frame that every current consumer uses.
+        self.assets_history_by_account_df = ah.history_df
+        self.assets_history_df = aggregate_assets_history_by_symbol(ah.history_df)
         portfolio_symbols = self.current_portfolio_summary_df['Symbol'].tolist()
         self.portfolio_assets_history_df = self.assets_history_df.loc[
             self.assets_history_df['Symbol'].isin(portfolio_symbols)]

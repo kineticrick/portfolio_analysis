@@ -163,6 +163,22 @@ The default `importer.py` is highly optimized vs. the legacy `importer_unoptimiz
 | `ThreadPoolExecutor` across brokerages | Parallel CSV processing |
 | Parameterized queries | SQL-injection safe |
 
+### Rebuilding asset history (one-time, after the per-account migration)
+
+`assets_history` stores one row per `(date, symbol, account_type)`. After
+pulling the change that introduced this schema, run the one-time rebuild once
+before starting the dashboard (the schema changed, so the old table must be
+regenerated):
+
+```bash
+source venv/bin/activate
+python generators/rebuild_asset_history.py
+```
+
+This regenerates `assets_history`, `portfolio_history`, and
+`assets_hypothetical_history` from your transactions (prices are cached). It is
+safe to re-run.
+
 ---
 
 ## Architecture

@@ -356,9 +356,14 @@ def gen_hist_quantities_mult(assets_event_log_df: pd.DataFrame,
             (assets_event_log_df['Symbol'] == symbol) & 
             ((assets_event_log_df['AccountType'] == account_type) | 
              (assets_event_log_df['AccountType'] == 'Agnostic'))]
-        symbol_quantities_df = gen_hist_quantities(symbol_event_log_df, 
+        symbol_quantities_df = gen_hist_quantities(symbol_event_log_df,
                                                    cadence=cadence,
                                                    expand_chronology=expand_chronology)
+        # The per-event AccountType ffills 'Agnostic' (splits/acquisitions) across a
+        # series; overwrite with this series' true account so every row is cleanly
+        # labeled. Required for the (date, symbol, account_type) primary key, and it
+        # also removes the spurious 'Agnostic' bucket from the AccountType dimension.
+        symbol_quantities_df['AccountType'] = account_type
         quantities_df = pd.concat([quantities_df, symbol_quantities_df])
 
     return quantities_df
@@ -502,8 +507,32 @@ def gen_assets_historical_value(symbols: list=[],
     # Should only be 1 row per exited asset 
     if not include_exit_date: 
         merged_df = merged_df[merged_df['Quantity'] != 0]
-    
+
     return merged_df
+
+
+def aggregate_assets_history_by_symbol(df: pd.DataFrame) -> pd.DataFrame:
+    """Collapse per-(date, symbol, account) asset history to per-(date, symbol).
+
+    Sums Quantity/CostBasis/Value, keeps ClosingPrice (identical per ticker/date),
+    and recomputes PercentReturn from the summed totals. Idempotent: a frame
+    already at per-symbol grain passes through unchanged. Used by readers that
+    want per-symbol totals while the stored table keeps per-account rows.
+    """
+    if df.empty:
+        return df
+    out = df.groupby(['Date', 'Symbol'], as_index=False).agg(
+        Quantity=('Quantity', 'sum'),
+        CostBasis=('CostBasis', 'sum'),
+        ClosingPrice=('ClosingPrice', 'first'),
+        Value=('Value', 'sum'),
+    )
+    out['PercentReturn'] = out.apply(
+        lambda r: (r['Value'] - r['CostBasis']) / r['CostBasis'] * 100
+        if r['CostBasis'] else 0.0, axis=1)
+    out[['CostBasis', 'ClosingPrice', 'Value', 'PercentReturn']] = \
+        out[['CostBasis', 'ClosingPrice', 'Value', 'PercentReturn']].round(2)
+    return out
 
 # Module-level cache for the expensive expanded_df computation in gen_aggregated_historical_value.
 # Key: (tuple(symbols), cadence, start_date, account_type) -> expanded DataFrame with asset info merged.

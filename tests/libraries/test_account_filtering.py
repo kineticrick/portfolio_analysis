@@ -108,3 +108,29 @@ class TestHandlerFilteredSeam(unittest.TestCase):
             handler.get_filtered_dimension_history("Sector")
         agg.assert_called_once_with("Sector", symbols=[], start_date=None,
                                     account_type=None)
+
+
+class TestAccountLabelCleaning(unittest.TestCase):
+    def test_value_rows_have_clean_account_labels(self):
+        from libraries.helpers import gen_assets_historical_value
+        df = gen_assets_historical_value(cadence="daily", start_date="2026-01-01")
+        self.assertIn("AccountType", df.columns)
+        labels = set(df["AccountType"].unique())
+        self.assertTrue(labels.issubset({"Discretionary", "Retirement"}),
+                        f"leaked labels present: {labels}")
+
+    def test_account_dimension_has_no_agnostic_bucket(self):
+        from libraries.helpers import gen_aggregated_historical_value
+        agg = gen_aggregated_historical_value("AccountType", start_date="2026-01-01")
+        self.assertNotIn("Agnostic", set(agg["AccountType"].unique()))
+
+
+class TestPerSymbolSeam(unittest.TestCase):
+    def test_aggregate_real_history_is_unique_per_symbol(self):
+        from libraries.HistoryHandlers import AssetHistoryHandler
+        from libraries.helpers import aggregate_assets_history_by_symbol
+        hist = AssetHistoryHandler().history_df
+        agg = aggregate_assets_history_by_symbol(hist)
+        dups = int(agg.duplicated(subset=["Date", "Symbol"]).sum())
+        self.assertEqual(dups, 0)
+        self.assertNotIn("AccountType", agg.columns)

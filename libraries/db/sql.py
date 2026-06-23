@@ -158,28 +158,29 @@ create_assets_history_table_sql = \
     ("CREATE TABLE IF NOT EXISTS assets_history ("
     "date DATE NOT NULL, "
     "symbol VARCHAR(4) NOT NULL, "
+    "account_type VARCHAR(100) NOT NULL, "
     "quantity INT NOT NULL, "
     "cost_basis DECIMAL(13, 2) NOT NULL, "
     "closing_price DECIMAL(13, 2) NOT NULL, "
     "value DECIMAL(13, 2) NOT NULL, "
     "percent_return DECIMAL(13, 2) NOT NULL, "
-    "PRIMARY KEY (date, symbol))")
-    
+    "PRIMARY KEY (date, symbol, account_type))")
+
 insert_ignore_assets_history_sql = \
     ("INSERT IGNORE INTO assets_history"
-     "(date, symbol, quantity, cost_basis, closing_price, value, percent_return) "
-     "VALUES ('{date}','{symbol}', '{quantity}', '{cost_basis}', '{closing_price}', '{value}', '{percent_return}')")
-    
+     "(date, symbol, account_type, quantity, cost_basis, closing_price, value, percent_return) "
+     "VALUES ('{date}','{symbol}', '{account_type}', '{quantity}', '{cost_basis}', '{closing_price}', '{value}', '{percent_return}')")
+
 insert_update_assets_history_sql = \
     ("INSERT INTO assets_history"
-     "(date, symbol, quantity, cost_basis, closing_price, value, percent_return) "
-     "VALUES ('{date}','{symbol}', '{quantity}', '{cost_basis}', '{closing_price}', '{value}', '{percent_return}') "
+     "(date, symbol, account_type, quantity, cost_basis, closing_price, value, percent_return) "
+     "VALUES ('{date}','{symbol}', '{account_type}', '{quantity}', '{cost_basis}', '{closing_price}', '{value}', '{percent_return}') "
      "ON DUPLICATE KEY UPDATE "
-     "date='{date}', symbol='{symbol}', quantity='{quantity}', "
+     "date='{date}', symbol='{symbol}', account_type='{account_type}', quantity='{quantity}', "
      "cost_basis='{cost_basis}', closing_price='{closing_price}', value='{value}', percent_return='{percent_return}'")
-    
+
 read_assets_history_query = "SELECT * FROM assets_history"
-read_assets_history_columns = ['Date', 'Symbol', 'Quantity', 'CostBasis', 'ClosingPrice', 'Value', 'PercentReturn']
+read_assets_history_columns = ['Date', 'Symbol', 'AccountType', 'Quantity', 'CostBasis', 'ClosingPrice', 'Value', 'PercentReturn']
 
 #HistoryHelper - portfolio_history table
 create_portfolio_history_table_sql = \

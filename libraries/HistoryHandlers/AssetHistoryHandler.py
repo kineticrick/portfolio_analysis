@@ -5,12 +5,25 @@ import pandas as pd
 sys.path.append(os.path.join(os.path.dirname(__file__), '../..'))
 
 from libraries.db import dbcfg, MysqlDB
-from libraries.db.sql import (create_assets_history_table_sql, insert_update_assets_history_sql, 
-                           insert_ignore_assets_history_sql, read_assets_history_query, 
+from libraries.db.sql import (create_assets_history_table_sql, insert_update_assets_history_sql,
+                           insert_ignore_assets_history_sql, read_assets_history_query,
                            read_assets_history_columns)
 from libraries.HistoryHandlers import BaseHistoryHandler
 from libraries.pandas_helpers import print_full, mysql_to_df
 from libraries.helpers import gen_assets_historical_value
+
+
+def build_assets_history_rows(assets_df):
+    """Per-account insert tuples for assets_history, one per input row:
+    (date, symbol, account_type, quantity, cost_basis, closing_price,
+     value, percent_return)."""
+    return [
+        (row['Date'], row['Symbol'], row['AccountType'], row['Quantity'],
+         row['CostBasis'], row['ClosingPrice'], row['Value'],
+         row['PercentReturn'])
+        for _, row in assets_df.iterrows()
+    ]
+
 
 class AssetHistoryHandler(BaseHistoryHandler):
     create_history_table_sql = create_assets_history_table_sql
@@ -48,36 +61,22 @@ class AssetHistoryHandler(BaseHistoryHandler):
                                         start_date=start_date,
                                         include_exit_date=False)
 
-        column_conversion_map = {
-            'date': 'Date',
-            'symbol': 'Symbol',
-            'quantity': 'Quantity',
-            'cost_basis': 'CostBasis',
-            'closing_price': 'ClosingPrice',
-            'value': 'Value',
-            'percent_return': 'PercentReturn',
-        }
-
         # OPTIMIZATION: Batch insert using executemany() instead of individual INSERTs
         # This provides 10-50x speedup (see generators/OPTIMIZATION_NOTES.md)
         with MysqlDB(dbcfg) as db:
             if overwrite:
                 # Use REPLACE INTO for overwrite
                 sql = """REPLACE INTO assets_history
-                         (date, symbol, quantity, cost_basis, closing_price, value, percent_return)
-                         VALUES (%s, %s, %s, %s, %s, %s, %s)"""
+                         (date, symbol, account_type, quantity, cost_basis, closing_price, value, percent_return)
+                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"""
             else:
                 # Use INSERT IGNORE for append-only
                 sql = """INSERT IGNORE INTO assets_history
-                         (date, symbol, quantity, cost_basis, closing_price, value, percent_return)
-                         VALUES (%s, %s, %s, %s, %s, %s, %s)"""
+                         (date, symbol, account_type, quantity, cost_basis, closing_price, value, percent_return)
+                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"""
 
-            # Prepare values as list of tuples
-            values = [
-                (row['Date'], row['Symbol'], row['Quantity'], row['CostBasis'],
-                 row['ClosingPrice'], row['Value'], row['PercentReturn'])
-                for _, row in assets_historical_data_df.iterrows()
-            ]
+            # One row per (date, symbol, account_type) — no collapsing, no drops.
+            values = build_assets_history_rows(assets_historical_data_df)
 
             if values:
                 db.cursor.executemany(sql, values)
