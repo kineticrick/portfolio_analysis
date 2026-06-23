@@ -5,8 +5,7 @@ import plotly.graph_objs as go
 import pandas as pd
 
 from visualization.dash.portfolio_dashboard.globals import *
-from pandas.tseries.offsets import DateOffset
-from libraries.returns import rebase_to_window_start
+from visualization.dash.assets_chart_helpers import prepare_per_account_chart_df
 
 import dash_mantine_components as dmc
 
@@ -83,66 +82,32 @@ def update_assets_table(sectors_sel, asset_types_sel, account_types_sel, geograp
     Input('assets-interval-dropdown', 'value'))
 def update_assets_hist_graph(selected_rows, interval):
     try:
-        # Use precomputed expanded data
-        expanded_df = DASH_HANDLER.portfolio_assets_history_expanded_df.copy()
-        expanded_df['Date'] = pd.to_datetime(expanded_df['Date'])
+        expanded = DASH_HANDLER.portfolio_assets_history_by_account_expanded_df
+        selected_pairs = (
+            {(r['Symbol'], r['AccountType']) for r in selected_rows}
+            if selected_rows else None)
 
-        # Filter by selected rows
-        if selected_rows:
-            selected_symbols = [row['Symbol'] for row in selected_rows]
-            expanded_df = expanded_df[expanded_df['Symbol'].isin(selected_symbols)]
+        df = prepare_per_account_chart_df(
+            expanded, DASH_HANDLER.current_portfolio_summary_df,
+            selected_pairs, interval, DASH_HANDLER.performance_milestones)
 
-        # Append today's live price as the final point per asset, so the chart's
-        # right edge matches the live current price the table uses. (History
-        # excludes today because the trading day hasn't closed.)
-        today = pd.Timestamp('today').normalize()
-        # Aggregate per symbol: a ticker held in multiple account types has
-        # several summary rows. Price is per-share (same), value is the total.
-        summary = (DASH_HANDLER.current_portfolio_summary_df
-                   .groupby('Symbol')
-                   .agg(**{'Current Price': ('Current Price', 'first'),
-                           'Current Value': ('Current Value', 'sum')}))
-        today_rows = []
-        for sym, sdf in expanded_df.groupby('Symbol'):
-            if sym in summary.index:
-                row = sdf.sort_values('Date').iloc[-1].copy()
-                row['Date'] = today
-                row['ClosingPrice'] = float(summary.loc[sym, 'Current Price'])
-                row['Value'] = float(summary.loc[sym, 'Current Value'])
-                today_rows.append(row)
-        if today_rows:
-            expanded_df = pd.concat(
-                [expanded_df, pd.DataFrame(today_rows)], ignore_index=True)
-
-        # Filter by interval
-        if interval != "Lifetime":
-            interval_days = {k: v for (k, v) in DASH_HANDLER.performance_milestones}
-            days = interval_days.get(interval, 365)
-            offset = DateOffset(days=days)
-            start_date = (pd.to_datetime('today') - offset).normalize()
-            expanded_df = expanded_df[expanded_df['Date'] >= start_date]
-
-        if expanded_df.empty:
+        if df.empty:
             return go.Figure().update_layout(
                 title="No data available. Select assets from the table above.")
 
-        # Rebase each asset's price to the window start (Lifetime = full history)
-        # so the line starts at 0% and the right edge is the live return.
-        expanded_df = expanded_df.sort_values(['Symbol', 'Date'])
-        expanded_df['ClosingPrice % Change'] = expanded_df.groupby('Symbol')[
-            'ClosingPrice'].transform(rebase_to_window_start)
-
+        # color = ticker (a ticker's accounts share a color),
+        # dash  = account (distinguishes Discretionary vs Retirement).
         fig = px.line(
-            expanded_df,
-            x=expanded_df['Date'],
-            y=expanded_df['ClosingPrice % Change'],
-            hover_data={'Value': ':$,.2f', 'ClosingPrice % Change': ':.2f%'},
-            color=expanded_df['Symbol'],
-            line_dash=expanded_df['Sector'],
+            df,
+            x='Date',
+            y='ClosingPrice % Change',
+            color='Symbol',
+            line_dash='AccountType',
+            hover_data={'Value': ':$,.2f', 'AccountType': True,
+                        'ClosingPrice % Change': ':.2f%'},
         )
         fig.update_layout(height=800)
         fig.update_yaxes(ticksuffix="%")
-
         return fig
     except Exception as e:
         print(f"Error in update_assets_hist_graph: {e}")

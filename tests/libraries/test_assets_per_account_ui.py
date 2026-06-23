@@ -40,3 +40,29 @@ class TestDemoPerAccountExpanded(unittest.TestCase):
                 {"Discretionary", "Retirement"}))
         # one account per (Date, Symbol) in demo (single-account symbols)
         self.assertEqual(int(df.duplicated(subset=["Date", "Symbol"]).sum()), 0)
+
+
+class TestAssetsTabCallbackDemo(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        import os
+        import importlib
+        os.environ["PORTFOLIO_DEMO_MODE"] = "1"
+        cls.assets_tab = importlib.import_module(
+            "visualization.dash.portfolio_dashboard.tabs.assets_tab"
+        )
+
+    def test_no_selection_renders_lines(self):
+        import plotly.graph_objs as go
+        fig = self.assets_tab.update_assets_hist_graph(None, "Lifetime")
+        self.assertIsInstance(fig, go.Figure)
+        self.assertGreaterEqual(len(fig.data), 1)
+
+    def test_selected_pair_renders(self):
+        import plotly.graph_objs as go
+        from visualization.dash.portfolio_dashboard.globals import DASH_HANDLER
+        srow = DASH_HANDLER.current_portfolio_summary_df.iloc[0]
+        rows = [{"Symbol": srow["Symbol"], "AccountType": srow["AccountType"]}]
+        fig = self.assets_tab.update_assets_hist_graph(rows, "Lifetime")
+        self.assertIsInstance(fig, go.Figure)
+        self.assertGreaterEqual(len(fig.data), 1)
