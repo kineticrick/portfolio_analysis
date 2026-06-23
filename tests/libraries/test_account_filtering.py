@@ -123,3 +123,14 @@ class TestAccountLabelCleaning(unittest.TestCase):
         from libraries.helpers import gen_aggregated_historical_value
         agg = gen_aggregated_historical_value("AccountType", start_date="2026-01-01")
         self.assertNotIn("Agnostic", set(agg["AccountType"].unique()))
+
+
+class TestPerSymbolSeam(unittest.TestCase):
+    def test_aggregate_real_history_is_unique_per_symbol(self):
+        from libraries.HistoryHandlers import AssetHistoryHandler
+        from libraries.helpers import aggregate_assets_history_by_symbol
+        hist = AssetHistoryHandler().history_df
+        agg = aggregate_assets_history_by_symbol(hist)
+        dups = int(agg.duplicated(subset=["Date", "Symbol"]).sum())
+        self.assertEqual(dups, 0)
+        self.assertNotIn("AccountType", agg.columns)

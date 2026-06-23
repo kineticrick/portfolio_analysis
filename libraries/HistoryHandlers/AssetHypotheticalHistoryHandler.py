@@ -11,8 +11,9 @@ from libraries.db.sql import (create_assets_hypothetical_history_table_sql,
                            read_assets_hypothetical_history_query,
                            read_assets_hypothetical_history_columns)
 from libraries.pandas_helpers import print_full, mysql_to_df
-from libraries.helpers import (build_master_log, gen_hist_quantities_mult, 
-                               get_historical_prices)
+from libraries.helpers import (build_master_log, gen_hist_quantities_mult,
+                               get_historical_prices,
+                               aggregate_assets_history_by_symbol)
 from libraries.globals import SYMBOL_BLACKLIST
 from pandas.tseries.offsets import BDay
 
@@ -54,9 +55,10 @@ class AssetHypotheticalHistoryHandler(BaseHistoryHandler):
 
         if assets_history_df is None:
             # Initialize AssetHistoryHandler to ensure that base data is up-to-date
-            # Will be used in both set and get history, so just initialize here 
             asset_history_handler = AssetHistoryHandler(self.symbols)
-            self.assets_history_df = asset_history_handler.history_df
+            # Stored history is per-account; this handler works per-symbol.
+            self.assets_history_df = aggregate_assets_history_by_symbol(
+                asset_history_handler.history_df)
         else:
             self.assets_history_df = assets_history_df
 
