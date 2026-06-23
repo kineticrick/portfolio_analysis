@@ -61,16 +61,6 @@ class AssetHistoryHandler(BaseHistoryHandler):
                                         start_date=start_date,
                                         include_exit_date=False)
 
-        column_conversion_map = {
-            'date': 'Date',
-            'symbol': 'Symbol',
-            'quantity': 'Quantity',
-            'cost_basis': 'CostBasis',
-            'closing_price': 'ClosingPrice',
-            'value': 'Value',
-            'percent_return': 'PercentReturn',
-        }
-
         # OPTIMIZATION: Batch insert using executemany() instead of individual INSERTs
         # This provides 10-50x speedup (see generators/OPTIMIZATION_NOTES.md)
         with MysqlDB(dbcfg) as db:
