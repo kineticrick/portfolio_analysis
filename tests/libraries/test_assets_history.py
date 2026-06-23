@@ -103,3 +103,20 @@ class TestBuildAssetsHistoryRows(unittest.TestCase):
         # field order: (Date, Symbol, AccountType, Quantity, CostBasis,
         #               ClosingPrice, Value, PercentReturn)
         self.assertEqual(rows[0][1], "DUP")
+
+
+import importlib.util
+import os
+
+
+class TestRebuildScript(unittest.TestCase):
+    def test_rebuild_module_exposes_callable(self):
+        path = os.path.join(os.path.dirname(__file__), "..", "..",
+                            "generators", "rebuild_asset_history.py")
+        path = os.path.abspath(path)
+        self.assertTrue(os.path.exists(path), f"missing: {path}")
+        spec = importlib.util.spec_from_file_location("rebuild_asset_history",
+                                                      path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)   # import only; does NOT run the rebuild
+        self.assertTrue(callable(getattr(mod, "rebuild_asset_history", None)))
