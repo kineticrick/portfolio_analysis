@@ -30,6 +30,19 @@ from libraries.HistoryHandlers import (AssetHistoryHandler,
                                        AssetHypotheticalHistoryHandler)
 
 
+def _check_rebuilt(table, require=True):
+    """Guard against a silent no-op: each rebuild relies on a handler's
+    constructor self-populating an (empty) table. Report the row count and,
+    when required, fail loudly if it is still empty."""
+    with MysqlDB(dbcfg) as db:
+        count = db.query(f"SELECT COUNT(*) FROM {table}")[0][0]
+    print(f"  -> {table}: {count} rows")
+    if require and count == 0:
+        raise RuntimeError(
+            f"{table} is empty after rebuild — its handler did not populate it. "
+            f"Aborting before evicting cache.")
+
+
 def rebuild_asset_history():
     # Evict cached reads up front so handlers see live (post-DDL) table state.
     mysql_cache_evict(MYSQL_CACHE_HISTORY_TAG)
@@ -41,18 +54,22 @@ def rebuild_asset_history():
     with MysqlDB(dbcfg) as db:
         db.execute("DROP TABLE IF EXISTS assets_history")
     AssetHistoryHandler()
+    _check_rebuilt("assets_history")
 
     # 2. portfolio_history derives from assets_history.
     print("Rebuilding portfolio_history...")
     with MysqlDB(dbcfg) as db:
         db.execute("TRUNCATE TABLE portfolio_history")
     PortfolioHistoryHandler()
+    _check_rebuilt("portfolio_history")
 
-    # 3. assets_hypothetical_history derives from assets_history.
+    # 3. assets_hypothetical_history derives from assets_history. It can be
+    #    legitimately empty if no assets were ever sold, so report only.
     print("Rebuilding assets_hypothetical_history...")
     with MysqlDB(dbcfg) as db:
         db.execute("TRUNCATE TABLE assets_hypothetical_history")
     AssetHypotheticalHistoryHandler()
+    _check_rebuilt("assets_hypothetical_history", require=False)
 
     mysql_cache_evict(MYSQL_CACHE_HISTORY_TAG)
     print("✓ Rebuild complete; history cache evicted.")
