@@ -10,13 +10,14 @@ class TestAssetsHistorySchema(unittest.TestCase):
         self.assertIn("PRIMARY KEY (date, symbol, account_type)", create)
 
     def test_read_columns_match_table_column_order(self):
-        # Column names in the CREATE statement, before PRIMARY KEY, must map
-        # 1:1 (and in order) to read_assets_history_columns, because mysql_to_df
-        # assigns column names positionally to `SELECT *`.
+        # Column names in the CREATE statement must map 1:1 (and in order) to
+        # read_assets_history_columns, because mysql_to_df assigns column names
+        # positionally to `SELECT *`. Match each column name that precedes a
+        # type keyword — parens-aware, so DECIMAL(13, 2)'s inner comma is ignored
+        # and the PRIMARY KEY clause (no type keyword) is skipped.
+        import re
         create = sql.create_assets_history_table_sql
-        body = create[create.index("(") + 1: create.index("PRIMARY KEY")]
-        col_names = [seg.strip().split()[0] for seg in body.split(",")
-                     if seg.strip()]
+        col_names = re.findall(r"(\w+)\s+(?:DATE|VARCHAR|INT|DECIMAL)", create)
         mapping = {
             "date": "Date", "symbol": "Symbol", "account_type": "AccountType",
             "quantity": "Quantity", "cost_basis": "CostBasis",
