@@ -18,6 +18,7 @@ import numpy as np
 import pandas as pd
 
 import libraries.helpers as helpers
+from libraries.helpers import add_asset_info
 from visualization.dash.DashboardHandler import DashboardHandler
 
 # ---------------------------------------------------------------------------
@@ -352,6 +353,15 @@ class DemoDashboardHandler(DashboardHandler):
         self.portfolio_assets_history_expanded_df = self.expand_history_df(
             self.portfolio_assets_history_df.copy())
         print("✓ Expanded asset history precomputed")
+
+        # Per-account expanded history for the per-account Assets chart. Demo
+        # symbols are single-account, so attach each symbol's AccountType from
+        # the per-account summary, then add entity info.
+        acct_map = self.current_portfolio_summary_df[['Symbol', 'AccountType']]
+        by_account = self.portfolio_assets_history_df.merge(
+            acct_map, on='Symbol', how='left')
+        self.portfolio_assets_history_by_account_expanded_df = \
+            add_asset_info(by_account)
 
         # ================================================================
         # 7. Compute milestones and summary using inherited methods
