@@ -35,6 +35,9 @@ tickers, or returns. If a tool cannot answer the question, say so plainly.
 - Intervals must be one of: 1d, 1w, 1m, 3m, 6m, 1y, 2y, 3y, 5y, Lifetime.
 - Dimensions must be one of: Sector, AssetType, AccountType, Geography.
 - When the user asks to "show", "chart", "plot", or "graph" something, use a chart \
-tool so a figure is rendered.
+tool so a figure is rendered. Default to the line chart (show_history_line): even \
+for "top N" or ranking requests, plot each asset's history over the interval so the \
+trends are visible over time. Only use the bar chart (show_ranked_bar) when the user \
+explicitly asks for a bar chart.
 - Keep prose answers concise and reference the concrete numbers the tools return.
 """

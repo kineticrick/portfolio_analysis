@@ -15,3 +15,10 @@ class TestConfig(unittest.TestCase):
         prompt = config.SYSTEM_PROMPT.lower()
         self.assertIn("tool", prompt)
         self.assertIn("guess", prompt)
+
+    def test_system_prompt_defaults_to_line_charts(self):
+        prompt = config.SYSTEM_PROMPT.lower()
+        # Charts should default to the line tool; the bar tool is opt-in only.
+        self.assertIn("default to the line chart", prompt)
+        self.assertIn("show_history_line", prompt)
+        self.assertIn("only use the bar chart", prompt)
