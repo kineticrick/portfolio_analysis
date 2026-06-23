@@ -84,6 +84,21 @@ def make_fake_handler():
             "TotalCostBasis": [3000.0, 400.0, 3000.0, 400.0],
         })
 
+        last_filter_call = None
+
+        def get_filtered_dimension_history(self, dimension, account_type=None,
+                                           symbols=None, start_date=None):
+            # Record the call so routing tests can assert it was used.
+            self.last_filter_call = {
+                "dimension": dimension, "account_type": account_type,
+                "symbols": symbols, "start_date": start_date}
+            return pd.DataFrame({
+                "Date": [datetime.date(2026, 1, 1), datetime.date(2026, 6, 1)],
+                "Sector": ["Tech", "Tech"],
+                "total_value": [2000.0, 2500.0],
+                "total_cost_basis": [2000.0, 2000.0],
+            })
+
         portfolio_history_df = pd.DataFrame(
             {"Value": [3000.0, 3200.0, 3500.0],
              "CostBasis": [3400.0, 3400.0, 3400.0]},

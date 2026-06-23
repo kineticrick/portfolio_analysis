@@ -46,7 +46,7 @@ _EVENT_QUERIES = {
     'acquisition': (master_log_acquisitions_query, master_log_acquisitions_columns),
 }
 
-def  build_master_log(symbols: list=[]) -> pd.DataFrame:
+def  build_master_log(symbols: list=[], account_type: str=None) -> pd.DataFrame:
     """
     For each ASSET_EVENT, retrieve log of each event as a dataframe, then 
     merge each into a sorted master log
@@ -136,8 +136,17 @@ def  build_master_log(symbols: list=[]) -> pd.DataFrame:
     # ALL accounts)  
     
     master_log_df.loc[
-        master_log_df['Action'].isin(['split', 'acquisition-target', 'acquisition-acquirer']), 
+        master_log_df['Action'].isin(['split', 'acquisition-target', 'acquisition-acquirer']),
         'AccountType'] = 'Agnostic'
+
+    # Account-type filtering is applied at the transaction level (per CLAUDE.md):
+    # keep this account's own events plus 'Agnostic' events (splits/acquisitions
+    # apply to every account). Filtering here — rather than on the per-row
+    # AccountType of the computed value series — avoids dropping split-date rows
+    # that get tagged 'Agnostic' and ffilled forward.
+    if account_type is not None:
+        master_log_df = master_log_df[
+            master_log_df['AccountType'].isin([account_type, 'Agnostic'])]
 
     return master_log_df
 
@@ -372,10 +381,11 @@ def is_bday(date: str) -> bool:
     bday = BDay()
     return bday.is_on_offset(pd.to_datetime(date))
     
-def gen_assets_historical_value(symbols: list=[], 
+def gen_assets_historical_value(symbols: list=[],
                                 cadence: str='daily',
                                 start_date: str=None,
-                                include_exit_date=True) -> pd.DataFrame:
+                                include_exit_date=True,
+                                account_type: str=None) -> pd.DataFrame:
     """ 
     Provide lifetime value of asset within portfolio over time
     Takes quantity of shares, and asset price at that time, to calculate
@@ -396,8 +406,8 @@ def gen_assets_historical_value(symbols: list=[],
     assert(cadence in CADENCE_MAP.keys())
     assert(type(symbols) == list)
     
-    # Get master event log for asset 
-    assets_event_log_df = build_master_log(symbols)
+    # Get master event log for asset
+    assets_event_log_df = build_master_log(symbols, account_type=account_type)
 
     # Get historical share quantities of assets
     quantities_df = gen_hist_quantities_mult(assets_event_log_df, 
@@ -432,12 +442,28 @@ def gen_assets_historical_value(symbols: list=[],
     first_date = sorted_quantities_df.index[0]
     last_date = sorted_quantities_df.index[-1]
 
-    # Only use the symbols found in our transactions data
-    # This should be identical to those passed in, but just in case
-    returned_symbols = list(quantities_df['Symbol'].unique())
-    
+    # For an account_type-filtered call, fetch prices for the FULL (unfiltered)
+    # symbol universe so the filtered and unfiltered calls share the same
+    # price-cache bucket. yfinance's batch download returns 1-cent-different
+    # closes for the same ticker+date depending on which symbols are batched
+    # together; sharing the bucket is what keeps the account-split breakdown
+    # exactly reconcilable with the unfiltered total (Disc + Ret == full).
+    # The inner merge below restricts back to the symbols actually held.
+    # When unfiltered, assets_event_log_df is already the full log — reuse it
+    # instead of rebuilding (this is the hot path used throughout startup).
+    # Note: this penny-exact reconciliation guarantee is specific to the
+    # account_type split. An entity-filtered call (a non-empty `symbols` subset
+    # with account_type=None) deliberately prices only its subset and is not
+    # expected to reconcile against the unfiltered total — it only needs to be
+    # internally consistent.
+    if account_type is None:
+        full_symbols_log = assets_event_log_df
+    else:
+        full_symbols_log = build_master_log(symbols)
+    all_symbols = list(full_symbols_log['Symbol'].unique())
+
     # Get historical prices of assets
-    prices_df = get_historical_prices(tickers=returned_symbols, 
+    prices_df = get_historical_prices(tickers=all_symbols,
                                 start=first_date, end=last_date,
                                 interval=cadence, cleaned_up=True)
 
@@ -480,14 +506,15 @@ def gen_assets_historical_value(symbols: list=[],
     return merged_df
 
 # Module-level cache for the expensive expanded_df computation in gen_aggregated_historical_value.
-# Key: (tuple(symbols), cadence, start_date) -> expanded DataFrame with asset info merged.
+# Key: (tuple(symbols), cadence, start_date, account_type) -> expanded DataFrame with asset info merged.
 # This means when 4 dimension handlers call sequentially, only the first does the expensive work.
 _aggregation_cache = {}
 
 def gen_aggregated_historical_value(dimension: str,
                                     symbols: list=[],
                                     cadence: str='daily',
-                                    start_date: str=None) -> pd.DataFrame:
+                                    start_date: str=None,
+                                    account_type: str=None) -> pd.DataFrame:
     """
     Generate historical value of portfolio, aggregated by a given dimension
     Aggregation is done by taking the average of [cadence] percent return values of
@@ -506,13 +533,14 @@ def gen_aggregated_historical_value(dimension: str,
     assert(cadence in CADENCE_MAP.keys())
 
     # Check cache for the expensive expanded_df (shared across dimension calls)
-    cache_key = (tuple(symbols), cadence, str(start_date))
+    cache_key = (tuple(symbols), cadence, str(start_date), account_type)
     if cache_key not in _aggregation_cache:
         # Get all assets' historical values
         assets_history_df = gen_assets_historical_value(symbols=symbols,
                                                         cadence=cadence,
                                                         start_date=start_date,
-                                                        include_exit_date=False)
+                                                        include_exit_date=False,
+                                                        account_type=account_type)
         # Add in Sector, AssetType, etc columns
         _aggregation_cache[cache_key] = add_asset_info(assets_history_df, truncate=False)
 
@@ -529,6 +557,37 @@ def gen_aggregated_historical_value(dimension: str,
                                               ascending=True)
 
     return aggregated_df
+
+def compute_dimension_breakdown(aggregated_df: pd.DataFrame, dimension: str,
+                                lifetime: bool) -> pd.DataFrame:
+    """Collapse an aggregated dimension time series into a per-member summary.
+
+    Input columns: Date, <dimension>, total_value, total_cost_basis.
+    Output columns: <dimension>, 'Current Value', 'VW Return'.
+
+    - lifetime=True:  VW Return = (value - cost) / cost * 100   (cost-based)
+    - lifetime=False: VW Return = (last_value / first_value - 1) * 100 (rebased)
+    Current Value is the latest total_value for the member.
+    """
+    cols = [dimension, "Current Value", "VW Return"]
+    if aggregated_df.empty:
+        return pd.DataFrame(columns=cols)
+
+    rows = []
+    for member, grp in aggregated_df.sort_values("Date").groupby(dimension):
+        last_value = grp["total_value"].iloc[-1]
+        if lifetime:
+            last_cost = grp["total_cost_basis"].iloc[-1]
+            vw_return = (last_value - last_cost) / last_cost * 100 \
+                if last_cost else 0.0
+        else:
+            first_value = grp["total_value"].iloc[0]
+            vw_return = (last_value / first_value - 1) * 100 \
+                if first_value else 0.0
+        rows.append({dimension: member, "Current Value": round(last_value, 2),
+                     "VW Return": round(vw_return, 2)})
+
+    return pd.DataFrame(rows, columns=cols)
 
 def get_portfolio_summary() -> pd.DataFrame:
     """ 

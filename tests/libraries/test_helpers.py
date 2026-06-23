@@ -115,7 +115,7 @@ class TestHelpers(unittest.TestCase):
             'Sector':     ['Biotech', 'Biotech'],
         })
         # Inject directly into the cache so we exercise the aggregation only.
-        key = ((), 'daily', 'None')
+        key = ((), 'daily', 'None', None)
         H._aggregation_cache[key] = expanded
         out = H.gen_aggregated_historical_value(dimension='Sector')
         row = out.iloc[0]

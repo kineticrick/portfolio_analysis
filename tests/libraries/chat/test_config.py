@@ -15,3 +15,8 @@ class TestConfig(unittest.TestCase):
         prompt = config.SYSTEM_PROMPT.lower()
         self.assertIn("tool", prompt)
         self.assertIn("guess", prompt)
+
+    def test_system_prompt_mentions_filtering(self):
+        lowered = config.SYSTEM_PROMPT.lower()
+        self.assertIn("filter", lowered)
+        self.assertIn("account_type", lowered)

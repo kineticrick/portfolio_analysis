@@ -118,6 +118,39 @@ class TestDataTools(unittest.TestCase):
         self.assertIn("CCC", text)
         self.assertNotIn("BBB", text)
 
+    def test_dimension_breakdown_with_account_filter_uses_seam(self):
+        text, fig = tools.get_dimension_breakdown(
+            self.h, dimension="Sector", interval="6m",
+            filters={"account_type": "Discretionary"})
+        self.assertIsNone(fig)
+        # Routed through the filtered seam with the account type forwarded.
+        self.assertEqual(self.h.last_filter_call["account_type"], "Discretionary")
+        # 2500 / 2000 - 1 = 25%
+        self.assertIn("Tech", text)
+        self.assertIn("25", text)
+
+    def test_dimension_breakdown_entity_filter_resolves_symbols(self):
+        # geography=US matches AAA and BBB (not CCC) in the fake summary df.
+        tools.get_dimension_breakdown(
+            self.h, dimension="Sector", interval="6m",
+            filters={"geography": "US"})
+        self.assertEqual(set(self.h.last_filter_call["symbols"]), {"AAA", "BBB"})
+        self.assertIsNone(self.h.last_filter_call["account_type"])
+
+    def test_dimension_breakdown_no_filter_uses_cached_path(self):
+        # Without filters the fast cached path is used; the seam is NOT called.
+        self.h.last_filter_call = None
+        text, fig = tools.get_dimension_breakdown(
+            self.h, dimension="Sector", interval="Lifetime")
+        self.assertIsNone(self.h.last_filter_call)
+        self.assertIn("Health", text)
+
+    def test_dimension_breakdown_unknown_filter_key_errors(self):
+        text, fig = tools.dispatch(
+            self.h, "get_dimension_breakdown",
+            {"dimension": "Sector", "filters": {"bogus": "x"}})
+        self.assertIn("Unknown filter", text)
+
 
 class TestChartTools(unittest.TestCase):
     def setUp(self):
@@ -161,6 +194,14 @@ class TestChartTools(unittest.TestCase):
             interval="Lifetime")
         self.assertIsNone(fig)
         self.assertIn("Unknown dimension", text)
+
+    def test_show_history_line_dimension_with_filter(self):
+        text, fig = tools.show_history_line(
+            self.h, target_type="dimension", targets=["Sector"],
+            interval="6m", filters={"account_type": "Discretionary"})
+        self.assertIsInstance(fig, go.Figure)
+        self.assertEqual(self.h.last_filter_call["account_type"], "Discretionary")
+        self.assertGreaterEqual(len(fig.data), 1)
 
     def test_tool_schemas_cover_all_tools(self):
         names = {s["name"] for s in tools.TOOL_SCHEMAS}
