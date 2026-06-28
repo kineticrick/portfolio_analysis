@@ -4,3 +4,6 @@ cache/
 libraries/db/pwd.py
 .vscode/
 .env
+venv/
+venv.BAK/
+*.db
