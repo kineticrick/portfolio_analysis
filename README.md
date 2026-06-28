@@ -1,4 +1,6 @@
-# Portfolio Analysis Dashboard
+# Wake
+
+*Learn from where you've been.*
 
 A personal investment tracking and analysis platform built with Python, Dash, and MySQL. Imports transaction history from multiple brokerages, computes historical performance across multiple dimensions, and presents everything in an interactive 8-tab web dashboard — including a natural-language chat assistant that answers questions about your portfolio and draws charts on the fly.
 
